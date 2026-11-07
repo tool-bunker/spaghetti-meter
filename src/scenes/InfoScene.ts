@@ -1,3 +1,4 @@
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Container, Graphics, Text, type TextStyleOptions } from "pixi.js";
 import { UiButton } from "../ui/UiButton";
 import { COLORS, FONTS } from "../ui/theme";
@@ -5,23 +6,19 @@ import { COLORS, FONTS } from "../ui/theme";
 const BOLD_FONT_WEIGHT = "bold";
 const COMPACT_LAYOUT_MAX_WIDTH = 700;
 
-interface StepContent {
-  number: string;
-  title: string;
-  copy: string;
-}
+const CODE_BUSTER_REPOSITORY_URL = "https://github.com/tool-bunker/code-buster";
 
 export class InfoScene extends Container {
   private readonly background = new Graphics();
   private readonly glow = new Graphics();
-  private readonly eyebrow = centeredText("BEHIND THE BOWL", {
+  private readonly eyebrow = centeredText("ABOUT SPAGHETTI METER", {
     fill: COLORS.red,
     fontFamily: FONTS.mono,
     fontSize: 10,
     fontWeight: BOLD_FONT_WEIGHT,
     letterSpacing: 2,
   });
-  private readonly title = centeredText("How Spagetti works", {
+  private readonly title = centeredText("A playful second opinion", {
     fill: COLORS.heading,
     fontFamily: FONTS.serif,
     fontSize: 56,
@@ -30,39 +27,49 @@ export class InfoScene extends Container {
     align: "center",
   });
   private readonly lede = centeredText(
-    "Spagetti runs the bundled Code Buster engine on the folder you choose.\nEverything stays on this computer.",
+    "Spaghetti Meter turns Code Buster findings into a deliberately lighthearted score.\nIt is a conversation starter, not a final verdict on your repository.",
     {
-      fill: 0x9c9084,
+      fill: COLORS.body,
       fontFamily: FONTS.sans,
       fontSize: 14,
       lineHeight: 23,
       align: "center",
       wordWrap: true,
+      wordWrapWidth: 600,
+    },
+  );
+  private readonly note = new NoteCard();
+  private readonly formula = new FormulaCard();
+  private readonly feedback = centeredText(
+    "Help Code Buster improve by sharing examples of true positives and false positives.",
+    {
+      fill: COLORS.body,
+      fontFamily: FONTS.sans,
+      fontSize: 12,
+      align: "center",
+      wordWrap: true,
       wordWrapWidth: 560,
     },
   );
-  private readonly steps = [
-    new StepCard({
-      number: "01",
-      title: "Choose a project",
-      copy: "Only supported source files are analyzed.",
-    }),
-    new StepCard({
-      number: "02",
-      title: "Weigh the findings",
-      copy: "Actionable findings count as three; advisories count as one.",
-    }),
-    new StepCard({
-      number: "03",
-      title: "Serve the bowl",
-      copy: "The score controls the serving. One hundred fills the bowl.",
-    }),
-  ];
-  private readonly formula = new FormulaCard();
+  private readonly githubButton: UiButton;
+  private readonly licenseButton: UiButton;
   private readonly backButton: UiButton;
 
-  constructor(onBack: () => void) {
+  constructor(onBack: () => void, onLicenses: () => void) {
     super({ label: "info-scene", eventMode: "none", visible: false, alpha: 0 });
+    this.githubButton = new UiButton({
+      label: "GitHub · tool-bunker/code-buster ↗",
+      accessibleLabel: "Open the Code Buster repository on GitHub",
+      variant: "github",
+      onPress: () => {
+        void openUrl(CODE_BUSTER_REPOSITORY_URL);
+      },
+    });
+    this.licenseButton = new UiButton({
+      label: "Third-party licenses",
+      variant: "text",
+      onPress: onLicenses,
+    });
     this.backButton = new UiButton({
       label: "Back to the bowl",
       variant: "text",
@@ -74,78 +81,69 @@ export class InfoScene extends Container {
       this.eyebrow,
       this.title,
       this.lede,
-      ...this.steps,
+      this.note,
       this.formula,
+      this.feedback,
+      this.githubButton,
+      this.licenseButton,
       this.backButton,
     );
     this.title.accessible = true;
     this.title.accessibleType = "h1";
-    this.title.accessibleTitle = "How Spagetti works";
+    this.title.accessibleTitle = this.title.text;
     this.lede.accessible = true;
     this.lede.accessibleType = "p";
     this.lede.accessibleTitle = this.lede.text;
+    this.feedback.accessible = true;
+    this.feedback.accessibleType = "p";
+    this.feedback.accessibleTitle = this.feedback.text;
   }
 
   resize(width: number, height: number): void {
     const compact = width <= COMPACT_LAYOUT_MAX_WIDTH;
     const centerX = width / 2;
     const contentWidth = Math.min(width - (compact ? 36 : 64), 680);
+    const top = compact ? Math.max(58, height * 0.065) : Math.max(90, height * 0.12);
 
     this.background.clear().rect(0, 0, width, height).fill(COLORS.background);
     this.glow.clear()
       .circle(centerX, height * 0.15, Math.min(width * 0.34, 280))
       .fill({ color: COLORS.accent, alpha: 0.035 });
+    this.eyebrow.position.set(centerX, top);
 
-    if (compact) {
-      const top = Math.max(58, height * 0.065);
-      this.eyebrow.position.set(centerX, top);
-      this.title.style.fontSize = Math.min(48, Math.max(32, width * 0.085));
-      this.title.style.wordWrap = true;
-      this.title.style.wordWrapWidth = contentWidth;
-      this.title.position.set(centerX, top + 46);
-      this.lede.style.fontSize = 13;
-      this.lede.style.wordWrapWidth = contentWidth;
-      this.lede.position.set(centerX, top + 116);
+    this.title.style.fontSize = compact
+      ? Math.min(44, Math.max(30, width * 0.078))
+      : Math.min(68, Math.max(46, width * 0.05));
+    this.title.style.wordWrap = true;
+    this.title.style.wordWrapWidth = contentWidth;
+    this.title.position.set(centerX, top + (compact ? 44 : 58));
 
-      const cardWidth = contentWidth;
-      const cardHeight = Math.max(78, Math.min(94, (height - 440) / 3));
-      const cardStart = top + 190;
-      for (let index = 0; index < this.steps.length; index += 1) {
-        const step = this.steps[index];
-        step.resize(cardWidth, cardHeight, true);
-        step.position.set(centerX - cardWidth / 2, cardStart + index * (cardHeight + 8));
-      }
+    this.lede.style.fontSize = compact ? 13 : 14;
+    this.lede.style.wordWrapWidth = Math.min(contentWidth, 600);
+    this.lede.position.set(centerX, top + (compact ? 118 : 142));
 
-      const formulaY = cardStart + this.steps.length * (cardHeight + 8) + 4;
-      this.formula.resize(contentWidth, 98);
-      this.formula.position.set(centerX - contentWidth / 2, formulaY);
-      this.backButton.resize(Math.min(190, contentWidth), 28);
-      this.backButton.position.set(centerX - this.backButton.width / 2, formulaY + 108);
-    } else {
-      const top = Math.max(90, height * 0.14);
-      this.eyebrow.position.set(centerX, top);
-      this.title.style.fontSize = Math.min(72, Math.max(48, width * 0.052));
-      this.title.style.wordWrapWidth = contentWidth;
-      this.title.position.set(centerX, top + 62);
-      this.lede.style.fontSize = 14;
-      this.lede.style.wordWrapWidth = 560;
-      this.lede.position.set(centerX, top + 145);
+    const noteY = top + (compact ? 190 : 205);
+    const noteHeight = compact ? 142 : 136;
+    this.note.resize(contentWidth, noteHeight);
+    this.note.position.set(centerX - contentWidth / 2, noteY);
 
-      const gap = 12;
-      const cardWidth = (contentWidth - gap * 2) / 3;
-      const cardHeight = 138;
-      const cardY = top + 210;
-      for (let index = 0; index < this.steps.length; index += 1) {
-        const step = this.steps[index];
-        step.resize(cardWidth, cardHeight, false);
-        step.position.set(centerX - contentWidth / 2 + index * (cardWidth + gap), cardY);
-      }
+    const formulaY = noteY + noteHeight + 12;
+    this.formula.resize(contentWidth, 98);
+    this.formula.position.set(centerX - contentWidth / 2, formulaY);
 
-      this.formula.resize(contentWidth, 94);
-      this.formula.position.set(centerX - contentWidth / 2, cardY + cardHeight + 12);
-      this.backButton.resize(190, 28);
-      this.backButton.position.set(centerX - 95, cardY + cardHeight + 116);
-    }
+    this.feedback.style.wordWrapWidth = contentWidth;
+    this.feedback.position.set(centerX, formulaY + 119);
+
+    const githubWidth = Math.min(330, contentWidth);
+    this.githubButton.resize(githubWidth, 44);
+    this.githubButton.position.set(centerX - githubWidth / 2, formulaY + 141);
+
+    const footerY = formulaY + 199;
+    const footerWidth = Math.min(190, (contentWidth - 8) / 2);
+    this.licenseButton.resize(footerWidth, 28);
+    this.licenseButton.position.set(centerX - footerWidth - 4, footerY);
+    this.backButton.resize(footerWidth, 28);
+    this.backButton.position.set(centerX + 4, footerY);
   }
 
   setInteractive(interactive: boolean): void {
@@ -153,48 +151,53 @@ export class InfoScene extends Container {
   }
 }
 
-class StepCard extends Container {
+class NoteCard extends Container {
   private readonly panel = new Graphics();
-  private readonly numberText: Text;
-  private readonly titleText: Text;
-  private readonly copyText: Text;
+  private readonly eyebrow = centeredText("A PINCH OF SALT", {
+    fill: COLORS.red,
+    fontFamily: FONTS.mono,
+    fontSize: 10,
+    fontWeight: BOLD_FONT_WEIGHT,
+    letterSpacing: 2,
+  });
+  private readonly title = centeredText("Useful signal, not a final verdict.", {
+    fill: COLORS.project,
+    fontFamily: FONTS.serif,
+    fontSize: 20,
+    fontWeight: "500",
+    align: "center",
+  });
+  private readonly copy = centeredText(
+    "Every repository has its own context. If a result feels wrong, trust your judgment—and help Code Buster improve by sharing what was a true positive or a false positive.",
+    {
+      fill: COLORS.muted,
+      fontFamily: FONTS.sans,
+      fontSize: 12,
+      lineHeight: 18,
+      align: "center",
+      wordWrap: true,
+    },
+  );
 
-  constructor(content: StepContent) {
+  constructor() {
     super({ eventMode: "none" });
-    this.numberText = new Text({
-      text: content.number,
-      style: { fill: COLORS.red, fontFamily: FONTS.mono, fontSize: 10 },
-    });
-    this.titleText = new Text({
-      text: content.title,
-      style: { fill: COLORS.project, fontFamily: FONTS.serif, fontSize: 16, fontWeight: "500" },
-    });
-    this.copyText = new Text({
-      text: content.copy,
-      style: {
-        fill: COLORS.muted,
-        fontFamily: FONTS.sans,
-        fontSize: 11,
-        lineHeight: 16,
-        wordWrap: true,
-      },
-    });
-    this.addChild(this.panel, this.numberText, this.titleText, this.copyText);
+    this.addChild(this.panel, this.eyebrow, this.title, this.copy);
     this.accessible = true;
     this.accessibleType = "section";
-    this.accessibleTitle = `${content.number}. ${content.title}. ${content.copy}`;
+    this.accessibleTitle = "Take the Spaghetti Meter score with a grain of salt. Useful signal, not a final verdict. Every repository has its own context.";
   }
 
-  resize(width: number, height: number, compact: boolean): void {
+  resize(width: number, height: number): void {
     this.panel.clear()
-      .rect(0, 0, width, height)
-      .fill({ color: 0xffffff, alpha: 0.025 })
-      .stroke({ color: COLORS.text, alpha: 0.11, width: 1 });
-    const padding = 16;
-    this.numberText.position.set(padding, compact ? 14 : 16);
-    this.titleText.position.set(compact ? 52 : padding, compact ? 12 : 49);
-    this.copyText.style.wordWrapWidth = compact ? width - 68 : width - padding * 2;
-    this.copyText.position.set(compact ? 52 : padding, compact ? 36 : 77);
+      .roundRect(0, 0, width, height, 14)
+      .fill(COLORS.panel)
+      .stroke({ color: COLORS.panelBorder, width: 1 });
+    this.eyebrow.position.set(width / 2, 22);
+    this.title.style.wordWrap = true;
+    this.title.style.wordWrapWidth = width - 32;
+    this.title.position.set(width / 2, 52);
+    this.copy.style.wordWrapWidth = width - 40;
+    this.copy.position.set(width / 2, height - 42);
   }
 }
 
@@ -208,7 +211,7 @@ class FormulaCard extends Container {
     letterSpacing: 2,
   });
   private readonly formula = centeredText(
-    "100 × (actionable × 3 + advisory) ÷ max(files, 10)",
+    "100 × (actionable × 3 + advisory) / max(files, 10)",
     {
       fill: COLORS.accent,
       fontFamily: FONTS.mono,
@@ -245,6 +248,7 @@ class FormulaCard extends Container {
     this.eyebrow.position.set(width / 2, 18);
     this.formula.style.wordWrapWidth = width - 24;
     this.formula.position.set(width / 2, 45);
+    this.formula.style.fontSize = width < 460 ? 10 : 12;
     this.copy.style.wordWrapWidth = width - 24;
     this.copy.position.set(width / 2, height - 20);
   }

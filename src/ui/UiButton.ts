@@ -2,14 +2,15 @@ import { Button } from "@pixi/ui";
 import { Container, Graphics, Rectangle, Text } from "pixi.js";
 import { COLORS, FONTS } from "./theme";
 
-export type UiButtonVariant = "primary" | "text" | "circle";
+export type UiButtonVariant = "primary" | "text" | "circle" | "github";
+export type UiButtonIcon = "folder" | "replay";
 
 interface UiButtonOptions {
   label: string;
   accessibleLabel?: string;
   accessibleHint?: string;
   variant?: UiButtonVariant;
-  icon?: "folder";
+  icon?: UiButtonIcon;
   onPress: () => void;
 }
 
@@ -21,7 +22,7 @@ export class UiButton extends Container {
   private readonly iconView = new Graphics();
   private readonly button: Button;
   private readonly variant: UiButtonVariant;
-  private readonly icon?: "folder";
+  private readonly icon?: UiButtonIcon;
   private widthValue = 0;
   private heightValue = 0;
   private visualState: VisualState = "default";
@@ -30,17 +31,20 @@ export class UiButton extends Container {
     super({ label: `button-${options.label.toLowerCase().replaceAll(" ", "-")}` });
     this.variant = options.variant ?? "text";
     this.icon = options.icon;
+    const isCircle = this.variant === "circle";
+    const isGithub = this.variant === "github";
     this.labelView = new Text({
       text: options.label,
       style: {
-        fill: this.variant === "primary" ? COLORS.accentDark : COLORS.action,
-        fontFamily: this.variant === "circle" ? FONTS.serif : FONTS.sans,
-        fontSize: this.variant === "primary" ? 14 : this.variant === "circle" ? 17 : 12,
-        fontStyle: this.variant === "circle" ? "italic" : "normal",
-        fontWeight: this.variant === "primary" ? "700" : "500",
+        fill: isGithub ? 0xffffff : this.variant === "primary" ? COLORS.accentDark : COLORS.action,
+        fontFamily: isCircle ? FONTS.serif : FONTS.sans,
+        fontSize: this.variant === "primary" ? 14 : isCircle ? 17 : 12,
+        fontStyle: isCircle ? "italic" : "normal",
+        fontWeight: this.variant === "primary" || isGithub ? "700" : "500",
       },
       anchor: 0.5,
     });
+    this.labelView.visible = this.icon !== "replay";
     this.background.eventMode = "none";
     this.labelView.eventMode = "none";
     this.iconView.eventMode = "none";
@@ -62,8 +66,18 @@ export class UiButton extends Container {
     this.button.onUpOut.connect(() => this.setVisualState("default"));
     this.button.onPress.connect(options.onPress);
 
-    const defaultWidth = this.variant === "primary" ? 190 : this.variant === "circle" ? 34 : 180;
-    const defaultHeight = this.variant === "primary" ? 46 : this.variant === "circle" ? 34 : 28;
+    const defaultWidth = this.variant === "primary"
+      ? 190
+      : this.variant === "circle"
+        ? 34
+        : this.variant === "github"
+          ? 310
+          : 180;
+    const defaultHeight = this.variant === "primary" || this.variant === "github"
+      ? 46
+      : this.variant === "circle"
+        ? 34
+        : 28;
     this.resize(defaultWidth, defaultHeight);
   }
 
@@ -107,12 +121,18 @@ export class UiButton extends Container {
         .roundRect(0, 0, width, height, height / 2)
         .fill(pressed ? 0xefc34e : hovered ? COLORS.accentHover : COLORS.accent);
       this.labelView.style.fill = COLORS.accentDark;
+    } else if (this.variant === "github") {
+      this.background
+        .roundRect(0, 0, width, height, 8)
+        .fill(pressed ? 0x010409 : hovered ? 0x30363d : 0x24292f)
+        .stroke({ color: 0x57606a, alpha: hovered ? 1 : 0.5, width: 1 });
+      this.labelView.style.fill = 0xffffff;
     } else if (this.variant === "circle") {
       this.background
         .circle(width / 2, height / 2, Math.min(width, height) / 2 - 1)
         .fill({ color: COLORS.background, alpha: 0.72 })
         .stroke({ color: hovered ? COLORS.accent : COLORS.text, alpha: hovered ? 1 : 0.3, width: 1 });
-      this.labelView.style.fill = hovered ? COLORS.accent : 0xcbbcad;
+      this.labelView.style.fill = hovered ? COLORS.accent : COLORS.action;
     } else {
       this.labelView.style.fill = hovered ? COLORS.accent : COLORS.action;
       const lineWidth = Math.min(width - 8, Math.max(54, this.labelView.width + 4));
@@ -142,6 +162,18 @@ export class UiButton extends Container {
         .lineTo(iconX + 12, iconY)
         .stroke({ color: COLORS.accentDark, width: 2 });
       this.labelView.position.set(centerX + 8, centerY);
+    } else if (this.icon === "replay") {
+      const hovered = this.visualState === "hover" || this.visualState === "active";
+      const color = hovered ? COLORS.accent : COLORS.action;
+      this.iconView
+        .arc(centerX, centerY, 7, -Math.PI * 0.25, Math.PI * 1.5)
+        .stroke({ color, width: 1.8, cap: "round" })
+        .moveTo(centerX, centerY - 7)
+        .lineTo(centerX - 4, centerY - 10)
+        .moveTo(centerX, centerY - 7)
+        .lineTo(centerX - 4, centerY - 4)
+        .stroke({ color, width: 1.8, cap: "round", join: "round" });
+      this.labelView.position.set(centerX, centerY);
     } else {
       this.labelView.position.set(centerX, centerY);
     }

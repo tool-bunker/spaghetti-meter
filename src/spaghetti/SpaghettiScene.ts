@@ -1,53 +1,59 @@
 import {
+  ColliderDesc,
+  SoftBodyDesc,
+  World,
+  type SoftBody,
+} from "@dimforge/rapier2d-compat";
+import {
   Container,
+  FillGradient,
   Graphics,
+  MeshRope,
   Point,
   Sprite,
   Texture,
   type DestroyOptions,
+  type RopeGeometry,
   type Ticker,
 } from "pixi.js";
 import { SPAGHETTI_SETTINGS, type SpaghettiSettings } from "./settings";
+import type { BowlBounds } from "./geometry";
 
 interface RopeBody {
   points: Point[];
-  previous: Point[];
-  escapeSides: Int8Array;
-  landed: Uint8Array;
-  canSpill: boolean;
-  spillDirection: number;
-  stackOffset: number;
-  restSlope: number;
-  restPhase: number;
-  segments: Sprite[];
-  view: Container;
-  segmentLength: number;
+  body: SoftBody | undefined;
+  particleCount: number;
+  ropeLength: number;
+  collisionGroups: number;
+  spawnX: number;
+  spawnY: number;
+  targetX: number;
+  phase: number;
+  curl: number;
+  view: MeshRope;
+  caps: [Sprite, Sprite];
   spawnAt: number;
   active: boolean;
-  sleeping: boolean;
-  settledAt: number;
-  idlePhase: number;
-  idleStrength: number;
 }
 
-interface BowlBounds {
-  centerX: number;
-  rimY: number;
-  halfWidth: number;
-  depth: number;
-}
 
 export class SpaghettiScene extends Container {
   private readonly settings: SpaghettiSettings;
   private readonly segmentTexture: Texture;
   private readonly ownsSegmentTexture: boolean;
+  private readonly capTexture: Texture;
+  private readonly ownsCapTexture: boolean;
   private bowl: BowlBounds | undefined;
+  private bowlBack: Container | undefined;
+  private bowlFront: Container | undefined;
+  private world: World | undefined;
   private ropes: RopeBody[] = [];
   private elapsed = 0;
+  private accumulator = 0;
   private score = 0;
-  private sceneWidth = 0;
-  private sceneHeight = 0;
   private reducedMotion = false;
+  private activeRopeCount = 0;
+  private readonly impulseCenter = { x: 0, y: 0 };
 
   constructor(settings: SpaghettiSettings = SPAGHETTI_SETTINGS) {
     super({ label: "spaghetti-scene", eventMode: "none" });
@@ -55,11 +61,42 @@ export class SpaghettiScene extends Container {
     const texture = this.createSegmentTexture();
     this.segmentTexture = texture.texture;
     this.ownsSegmentTexture = texture.owned;
+    const capTexture = this.createCapTexture();
+    this.capTexture = capTexture.texture;
+    this.ownsCapTexture = capTexture.owned;
+  }
+
+  get productionProgress(): number {
+    if (this.reducedMotion || this.ropes.length === 0) return 1;
+    return this.activeRopeCount / this.ropes.length;
+  }
+
+  setBowlVisualOffset(offsetX: number): void {
+    if (this.bowlBack) this.bowlBack.x = offsetX;
+    if (this.bowlFront) this.bowlFront.x = offsetX;
+  }
+
+  applyRadialImpulse(x: number, y: number, magnitude: number, radius: number): void {
+    if (this.reducedMotion || !this.world || magnitude <= 0 || radius <= 0) return;
+    const scale = this.settings.physics.pixelsPerMeter;
+    this.impulseCenter.x = x / scale;
+    this.impulseCenter.y = y / scale;
+    const radiusInMeters = radius / scale;
+    for (const rope of this.ropes) {
+      if (!rope.active || !rope.body) continue;
+      rope.body.applyRadialImpulse(
+        this.impulseCenter,
+        magnitude,
+        radiusInMeters,
+        true,
+      );
+    }
   }
 
   rebuild(
     width: number,
     height: number,
+    bowl: BowlBounds,
     score: number,
     scanning: boolean,
     reducedMotion: boolean,
@@ -69,130 +106,169 @@ export class SpaghettiScene extends Container {
     for (const child of this.removeChildren()) {
       child.destroy({ children: true });
     }
+    this.world?.free();
+    this.world = undefined;
     this.ropes = [];
+    this.bowlBack = undefined;
+    this.bowlFront = undefined;
     this.elapsed = 0;
-    this.sceneWidth = width;
-    this.sceneHeight = height;
+    this.accumulator = 0;
+    this.activeRopeCount = 0;
     this.score = Math.max(0, Math.floor(score));
     this.reducedMotion = reducedMotion;
 
-    const bowlSettings = this.settings.bowl;
-    const halfWidth = Math.min(
-      width * (width <= 700 ? bowlSettings.compactWidthRatio : bowlSettings.wideWidthRatio),
-      bowlSettings.maximumHalfWidth,
-    );
-    const depth = Math.min(height * bowlSettings.depthRatio, bowlSettings.maximumDepth);
-    this.bowl = {
-      centerX: width / 2,
-      rimY: height * bowlSettings.rimYRatio,
-      halfWidth,
-      depth,
-    };
+    this.bowl = bowl;
 
+    if (!reducedMotion) this.world = this.createPhysicsWorld(width, height);
     this.drawBowlBack();
     const ropeLayer = new Container({ label: "spaghetti-ropes", eventMode: "none" });
     this.addChild(ropeLayer);
     if (this.score > 0) this.createRopes(ropeLayer, this.score);
+    if (this.reducedMotion) this.activeRopeCount = this.ropes.length;
     this.drawBowlOutline();
     if (scanning) this.drawScanningRing();
   }
 
   update(ticker: Ticker): void {
-    if (this.reducedMotion || this.ropes.length === 0 || !this.bowl) return;
+    if (this.reducedMotion || this.ropes.length === 0 || !this.world) return;
 
     this.elapsed += ticker.deltaMS;
-    if (this.updateRopeActivity()) this.simulateActiveRopes(ticker.deltaMS);
-    this.animateSettledRopes();
-  }
-
-  private updateRopeActivity(): boolean {
-    let hasMovingRopes = false;
-    for (const body of this.ropes) {
-      if (!body.active && this.elapsed >= body.spawnAt) {
-        body.active = true;
-        body.view.visible = true;
-      }
-
-      const sleepAfter = body.canSpill
-        ? this.settings.settling.spillAfterMs
-        : this.settings.settling.containedAfterMs;
-      if (body.active && !body.sleeping && this.elapsed - body.spawnAt >= sleepAfter) {
-        body.sleeping = true;
-        body.settledAt = this.elapsed;
-        for (let index = 0; index < body.points.length; index += 1) {
-          body.previous[index].copyFrom(body.points[index]);
-        }
-      }
-      hasMovingRopes ||= body.active && !body.sleeping;
-    }
-    return hasMovingRopes;
-  }
-
-
-  private simulateActiveRopes(deltaMs: number): void {
+    const activated = this.activateRopes();
     const physics = this.settings.physics;
-    const denseServing = this.ropes.length > physics.denseServingCount;
-    const substeps = this.ropes.length > physics.mediumServingCount ? 2 : 3;
-    const iterations = denseServing ? 3 : this.ropes.length > physics.mediumServingCount ? 4 : 5;
-    const step = Math.min(deltaMs / 1000, physics.maximumStepSeconds) / substeps;
-    for (let substep = 0; substep < substeps; substep += 1) {
-      this.integrate(step);
-      for (let iteration = 0; iteration < iterations; iteration += 1) {
-        this.constrainActiveRopes();
-      }
+    this.accumulator += Math.min(ticker.deltaMS / 1_000, physics.maximumFrameSeconds);
+    let steps = 0;
+    while (this.accumulator >= physics.timeStep && steps < physics.maximumSubSteps) {
+      this.world.step();
+      this.accumulator -= physics.timeStep;
+      steps += 1;
     }
-    this.renderActiveRopes();
-  }
-
-  private constrainActiveRopes(): void {
-    for (const body of this.ropes) {
-      if (!body.active || body.sleeping) continue;
-      this.constrainRope(body);
-      this.constrainBend(body);
-      this.collideWithBowl(body);
+    if (steps === physics.maximumSubSteps) {
+      this.accumulator = Math.min(this.accumulator, physics.timeStep);
     }
-  }
-
-  private renderActiveRopes(): void {
-    for (const body of this.ropes) {
-      if (body.active && !body.sleeping) this.renderRope(body);
-    }
+    if (steps > 0 || activated) this.renderPhysicsRopes();
   }
 
   dispose(): void {
     for (const child of this.removeChildren()) {
       child.destroy({ children: true });
     }
+    this.world?.free();
+    this.world = undefined;
+    this.ropes = [];
+    this.bowlBack = undefined;
+    this.bowlFront = undefined;
+    this.activeRopeCount = 0;
     if (this.ownsSegmentTexture) this.segmentTexture.destroy(true);
+    if (this.ownsCapTexture) this.capTexture.destroy(true);
     super.destroy({ children: false } as DestroyOptions);
+  }
+
+  private createPhysicsWorld(width: number, height: number): World {
+    if (!this.bowl) throw new Error("Bowl geometry must exist before creating physics");
+    const physics = this.settings.physics;
+    const world = new World({ x: 0, y: physics.gravity });
+    world.timestep = physics.timeStep;
+    world.integrationParameters.numSolverIterations = physics.solverIterations;
+    world.integrationParameters.numInternalPgsIterations = physics.internalPgsIterations;
+    world.integrationParameters.softBodiesMaxExtraSubsteps = physics.maximumExtraSubsteps;
+
+    const scale = physics.pixelsPerMeter;
+    const innerHalfWidth = this.bowl.halfWidth * this.settings.bowl.innerWidthRatio;
+    const left = this.bowl.centerX - innerHalfWidth;
+    const bowlVertices = new Float32Array((this.settings.bowl.physicsSegments + 1) * 2);
+    for (let index = 0; index <= this.settings.bowl.physicsSegments; index += 1) {
+      const progress = index / this.settings.bowl.physicsSegments;
+      const x = left + progress * innerHalfWidth * 2;
+      bowlVertices[index * 2] = x / scale;
+      bowlVertices[index * 2 + 1] = this.bowlFloorY(x) / scale;
+    }
+    world.createCollider(
+      ColliderDesc.polyline(bowlVertices)
+        .setFriction(physics.friction)
+        .setRestitution(0),
+    );
+    const boundaryInset = physics.viewportBoundaryInset;
+    const boundaryThickness = physics.viewportBoundaryThickness;
+    const wallHalfHeight = (height - boundaryInset) / 2 + boundaryThickness;
+    const wallCenterY = (height - boundaryInset) / 2;
+    const createBoundary = (
+      halfWidth: number,
+      halfHeight: number,
+      centerX: number,
+      centerY: number,
+    ): void => {
+      world.createCollider(
+        ColliderDesc.cuboid(halfWidth / scale, halfHeight / scale)
+          .setTranslation(centerX / scale, centerY / scale)
+          .setFriction(physics.friction)
+          .setRestitution(0),
+      );
+    };
+    createBoundary(
+      boundaryThickness,
+      wallHalfHeight,
+      boundaryInset - boundaryThickness,
+      wallCenterY,
+    );
+    createBoundary(
+      boundaryThickness,
+      wallHalfHeight,
+      width - boundaryInset + boundaryThickness,
+      wallCenterY,
+    );
+    createBoundary(
+      width / 2 + boundaryThickness,
+      boundaryThickness,
+      width / 2,
+      height - boundaryInset + boundaryThickness,
+    );
+    return world;
   }
 
   private drawBowlBack(): void {
     if (!this.bowl) return;
     const { centerX, rimY, halfWidth, depth } = this.bowl;
-    const left = centerX - halfWidth;
-    const right = centerX + halfWidth;
+    const openingFill = new FillGradient({
+      type: "linear",
+      end: { x: 0, y: 1 },
+      colorStops: [
+        { offset: 0, color: 0xcfd2d2 },
+        { offset: 0.5, color: 0xe9eaea },
+        { offset: 1, color: 0xfafafa },
+      ],
+    });
+    const footFill = new FillGradient({
+      type: "linear",
+      end: { x: 0, y: 1 },
+      colorStops: [
+        { offset: 0, color: 0xf2f3f3 },
+        { offset: 1, color: 0xd7d9d9 },
+      ],
+    });
 
     const shadow = new Graphics()
-      .ellipse(centerX, rimY + depth * 1.35, halfWidth * 0.78, depth * 0.12)
-      .fill({ color: 0x0c0806, alpha: 0.34 });
-    const shell = new Graphics()
-      .moveTo(left, rimY)
-      .quadraticCurveTo(centerX, rimY + depth * 1.3, right, rimY)
-      .lineTo(left, rimY)
-      .closePath()
-      .fill({ color: 0xb94f3e, alpha: 1 });
-    const cavity = new Graphics()
-      .moveTo(left + 10, rimY + 2)
-      .quadraticCurveTo(centerX, rimY + depth * 0.82, right - 10, rimY + 2)
-      .lineTo(left + 10, rimY + 2)
-      .closePath()
-      .fill({ color: 0x24140f, alpha: 0.98 });
+      .ellipse(centerX, rimY + depth * 1.08, halfWidth * 0.68, depth * 0.075)
+      .fill({ color: 0x6d7272, alpha: 0.16 });
+    const footWidth = halfWidth * 0.4;
+    const foot = new Graphics()
+      .roundRect(
+        centerX - footWidth / 2,
+        rimY + depth * 0.89,
+        footWidth,
+        depth * 0.17,
+        depth * 0.045,
+      )
+      .fill(footFill)
+      .stroke({ color: 0xc7caca, alpha: 0.8, width: 1 });
     const opening = new Graphics()
-      .ellipse(centerX, rimY, halfWidth, depth * 0.13)
-      .fill({ color: 0x20110d, alpha: 1 });
+      .ellipse(centerX, rimY, halfWidth, depth * 0.09)
+      .fill(openingFill)
+      .stroke({ color: 0xd7dada, width: 1.5 });
 
-    this.addChild(shadow, shell, cavity, opening);
+    const back = new Container({ label: "bowl-back", eventMode: "none" });
+    back.addChild(shadow, foot, opening);
+    this.bowlBack = back;
+    this.addChild(back);
   }
 
   private drawBowlOutline(): void {
@@ -200,13 +276,65 @@ export class SpaghettiScene extends Container {
     const { centerX, rimY, halfWidth, depth } = this.bowl;
     const left = centerX - halfWidth;
     const right = centerX + halfWidth;
-    const outline = new Graphics()
+    const ceramicFill = new FillGradient({
+      type: "linear",
+      end: { x: 0, y: 1 },
+      colorStops: [
+        { offset: 0, color: 0xffffff },
+        { offset: 0.48, color: 0xf5f6f6 },
+        { offset: 0.82, color: 0xe5e7e7 },
+        { offset: 1, color: 0xd2d5d5 },
+      ],
+    });
+
+    const body = new Graphics()
       .moveTo(left, rimY)
-      .quadraticCurveTo(centerX, rimY + depth * 1.3, right, rimY)
-      .stroke({ color: 0xf3bea0, alpha: 0.82, width: 4, cap: "round" })
-      .ellipse(centerX, rimY, halfWidth, depth * 0.13)
-      .stroke({ color: 0xf3bea0, alpha: 0.82, width: 4 });
-    this.addChild(outline);
+      .quadraticCurveTo(centerX, rimY + depth * 0.11, right, rimY)
+      .bezierCurveTo(
+        right - halfWidth * 0.03,
+        rimY + depth * 0.48,
+        centerX + halfWidth * 0.48,
+        rimY + depth * 0.88,
+        centerX + halfWidth * 0.2,
+        rimY + depth * 0.95,
+      )
+      .quadraticCurveTo(
+        centerX,
+        rimY + depth,
+        centerX - halfWidth * 0.2,
+        rimY + depth * 0.95,
+      )
+      .bezierCurveTo(
+        centerX - halfWidth * 0.48,
+        rimY + depth * 0.88,
+        left + halfWidth * 0.03,
+        rimY + depth * 0.48,
+        left,
+        rimY,
+      )
+      .closePath()
+      .fill(ceramicFill)
+      .stroke({ color: 0xcfd2d2, width: 1.5, join: "round" });
+    const rim = new Graphics()
+      .moveTo(left, rimY)
+      .quadraticCurveTo(centerX, rimY + depth * 0.11, right, rimY)
+      .stroke({ color: 0xc6caca, width: 2, cap: "round" });
+    const highlight = new Graphics()
+      .moveTo(left + halfWidth * 0.14, rimY + depth * 0.1)
+      .bezierCurveTo(
+        left + halfWidth * 0.2,
+        rimY + depth * 0.28,
+        centerX - halfWidth * 0.48,
+        rimY + depth * 0.5,
+        centerX - halfWidth * 0.3,
+        rimY + depth * 0.66,
+      )
+      .stroke({ color: 0xffffff, alpha: 0.9, width: 5, cap: "round" });
+
+    const front = new Container({ label: "bowl-front", eventMode: "none" });
+    front.addChild(body, rim, highlight);
+    this.bowlFront = front;
+    this.addChild(front);
   }
 
   private drawScanningRing(): void {
@@ -214,7 +342,7 @@ export class SpaghettiScene extends Container {
     const ring = new Graphics()
       .ellipse(this.bowl.centerX, this.bowl.rimY, this.bowl.halfWidth * 0.62, this.bowl.depth * 0.08)
       .stroke({ color: 0xffd55a, alpha: 0.48, width: 2 });
-    this.addChild(ring);
+    this.bowlFront?.addChild(ring);
   }
 
   private createSegmentTexture(): { texture: Texture; owned: boolean } {
@@ -225,10 +353,36 @@ export class SpaghettiScene extends Container {
     if (!context) return { texture: Texture.WHITE, owned: false };
 
     context.fillStyle = "white";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    return { texture: Texture.from(canvas), owned: true };
+  }
+
+  private createCapTexture(): { texture: Texture; owned: boolean } {
+    const canvas = document.createElement("canvas");
+    const size = this.settings.render.capTextureSize;
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext("2d");
+    if (!context) return { texture: Texture.WHITE, owned: false };
+
+    context.fillStyle = "white";
     context.beginPath();
-    context.roundRect(0, 0, canvas.width, canvas.height, canvas.height / 2);
+    context.arc(size / 2, size / 2, size / 2 - 0.5, 0, Math.PI * 2);
     context.fill();
     return { texture: Texture.from(canvas), owned: true };
+  }
+
+  private createCap(tint: number): Sprite {
+    const cap = new Sprite({
+      texture: this.capTexture,
+      tint,
+      visible: this.reducedMotion,
+      eventMode: "none",
+    });
+    cap.anchor.set(0.5);
+    cap.width = this.settings.strand.thickness;
+    cap.height = this.settings.strand.thickness;
+    return cap;
   }
 
   private createRopes(layer: Container, servingSize: number): void {
@@ -237,96 +391,188 @@ export class SpaghettiScene extends Container {
     const strand = this.settings.strand;
     const containedScore = Math.min(servingSize, serving.containedScore);
     const overflowScore = Math.max(0, servingSize - serving.containedScore);
-    const physicalCount = Math.min(
-      serving.maximumCount,
-      Math.round(serving.baseCount + containedScore * serving.containedGrowth + overflowScore * serving.overflowGrowth),
+    const physicalCount = Math.round(
+      serving.baseCount
+        + containedScore * serving.containedGrowth
+        + overflowScore * serving.overflowGrowth,
     );
     const overflowScale = Math.min(serving.overflowScaleLimit, overflowScore / serving.containedScore);
     const random = randomGenerator(this.score * 149 + (overflowScore > 0 ? 997 : 0));
-    const spillRopeCount = Math.min(
-      serving.maximumSpillCount,
-      Math.ceil(overflowScore / serving.overflowPerSpill),
-    );
-    const bowlRopeCount = physicalCount - spillRopeCount;
 
     for (let ropeIndex = 0; ropeIndex < physicalCount; ropeIndex += 1) {
-      const pointCount = strand.minimumPoints
-        + Math.floor(random() * strand.pointVariation)
-        + Math.round(overflowScale * strand.overflowPointGrowth);
-      const segmentLength = strand.minimumSegmentLength + random() * strand.segmentLengthVariation;
-      const ropeLength = segmentLength * (pointCount - 1);
-      const spillDirection = ropeIndex >= physicalCount - spillRopeCount
-        ? (ropeIndex % 2 === 0 ? -1 : 1)
-        : 0;
-      const spawnX = this.bowl.centerX + (random() - 0.5) * this.bowl.halfWidth * strand.spawnWidthRatio;
-      const targetX = this.bowl.centerX + (spawnX - this.bowl.centerX) * 0.55;
+      const renderPointCount = strand.minimumRenderPoints
+        + Math.floor(random() * strand.renderPointVariation);
+      const ropeLength = strand.minimumLength
+        + containedScore / serving.containedScore * strand.containedLengthGrowth
+        + random() * strand.lengthVariation
+        + overflowScale * strand.overflowLengthGrowth;
+      const spawnWidthRatio = strand.spawnWidthRatio + overflowScale * strand.overflowSpawnWidthGrowth;
+      const spawnX = this.bowl.centerX + (random() - 0.5) * this.bowl.halfWidth * spawnWidthRatio;
+      const targetWidthRatio = strand.targetWidthRatio + overflowScale * strand.overflowTargetWidthGrowth;
+      const targetX = this.bowl.centerX + (spawnX - this.bowl.centerX) * targetWidthRatio;
       const spawnY = -ropeLength - random() * this.bowl.depth * strand.spawnDepthRatio;
       const phase = random() * Math.PI * 2;
       const curl = strand.minimumCurl + random() * strand.curlVariation + overflowScale * strand.overflowCurlGrowth;
-      const points: Point[] = [];
-      const previous: Point[] = [];
-
-      for (let index = 0; index < pointCount; index += 1) {
-        const wave = Math.sin(index * 0.22 + phase) * curl;
-        const point = new Point(spawnX + wave, spawnY + index * segmentLength);
-        points.push(point);
-        const horizontalVelocity = (targetX - point.x) * 0.004;
-        previous.push(new Point(
-          point.x - horizontalVelocity - (random() - 0.5) * 0.2,
-          point.y - random() * 0.3,
-        ));
-      }
-
+      const points = Array.from({ length: renderPointCount }, () => new Point());
       const colorIndex = Math.floor(random() * strand.colors.length);
       const tint = strand.colors[colorIndex] ?? strand.colors[0];
-      const view = new Container({ visible: this.reducedMotion, eventMode: "none" });
-      const segments: Sprite[] = [];
-      for (let index = 0; index < pointCount - 1; index += 1) {
-        const segment = new Sprite({ texture: this.segmentTexture });
-        segment.anchor.set(0.5);
-        segment.tint = tint;
-        segment.height = strand.thickness;
-        view.addChild(segment);
-        segments.push(segment);
-      }
-      layer.addChild(view);
+      const view = new MeshRope({
+        texture: this.segmentTexture,
+        points,
+        width: strand.thickness,
+        tint,
+        visible: this.reducedMotion,
+        eventMode: "none",
+      });
+      view.autoUpdate = false;
+      const caps: [Sprite, Sprite] = [this.createCap(tint), this.createCap(tint)];
+      layer.addChild(view, ...caps);
+      const collisionMembership = 2 ** (ropeIndex % strand.collisionLayerCount);
 
-      const spawnAt = ropeIndex * strand.spawnIntervalMs + random() * strand.spawnJitterMs;
       const body: RopeBody = {
         points,
-        previous,
-        escapeSides: new Int8Array(pointCount),
-        landed: new Uint8Array(pointCount),
-        canSpill: spillDirection !== 0 || (servingSize >= 95 && ropeIndex === physicalCount - 1),
-        spillDirection,
-        stackOffset: this.bowl.depth * 0.6
-          * Math.min(ropeIndex / Math.max(bowlRopeCount - 1, 1), 1)
-          * Math.min(servingSize / serving.containedScore, 1),
-        restSlope: Math.sin((ropeIndex + 1) * 2.399) * 0.035,
-        restPhase: ropeIndex * 2.399,
-        segments,
+        body: undefined,
+        particleCount: strand.particleCount,
+        ropeLength,
+        collisionGroups: collisionMembership * 0x10000 + collisionMembership,
+        spawnX,
+        spawnY,
+        targetX,
+        phase,
+        curl,
         view,
-        segmentLength,
-        spawnAt,
+        caps,
+        spawnAt: ropeIndex * strand.spawnIntervalMs + random() * strand.spawnJitterMs,
         active: this.reducedMotion,
-        sleeping: false,
-        settledAt: 0,
-        idlePhase: random() * Math.PI * 2,
-        idleStrength: (
-          0.45
-          + ropeIndex / Math.max(physicalCount - 1, 1) * 0.9
-          + random() * 0.35
-        ) * (spillDirection === 0 ? 1 : this.settings.settling.spillIdleScale),
       };
       this.ropes.push(body);
 
-      if (this.reducedMotion) this.placeSettledRope(body, ropeIndex, physicalCount, random);
-      this.renderRope(body);
+      if (this.reducedMotion) {
+        this.placeSettledRope(body, ropeIndex, physicalCount, random);
+        this.updateRopeCaps(body);
+        (view.geometry as RopeGeometry).update();
+      }
     }
   }
 
+  private createPhysicsRope(rope: RopeBody): SoftBody | undefined {
+    if (!this.world) return undefined;
+    const strand = this.settings.strand;
+    const physics = this.settings.physics;
+    const scale = physics.pixelsPerMeter;
+    const collisionRadius = (strand.thickness / 2 + strand.collisionPadding) / scale;
+    const body = this.world.createSoftBody(
+      SoftBodyDesc.rope(
+        { x: rope.spawnX / scale, y: rope.spawnY / scale },
+        { x: rope.spawnX / scale, y: (rope.spawnY + rope.ropeLength) / scale },
+        rope.particleCount,
+      )
+        .setSoftness(physics.softnessFrequency, physics.softnessDampingRatio)
+        .setParticleMass(physics.particleMass)
+        .setParticleRadius(collisionRadius)
+        .setLinearDamping(physics.linearDamping)
+        .setSelfContacts(true)
+        .setCanSleep(true)
+        .setSurfaceCollider(
+          ColliderDesc.ball(collisionRadius)
+            .setFriction(physics.friction)
+            .setCollisionGroups(rope.collisionGroups)
+            .setRestitution(0),
+        ),
+    );
+
+    for (let index = 0; index < rope.particleCount; index += 1) {
+      const progress = index / (rope.particleCount - 1);
+      const wave = Math.sin(index * 0.48 + rope.phase) * rope.curl;
+      const x = rope.spawnX + wave;
+      body.setParticlePosition(index, {
+        x: x / scale,
+        y: (rope.spawnY + progress * rope.ropeLength) / scale,
+      });
+      body.setParticleVelocity(index, {
+        x: (rope.targetX - x) / scale * 0.2,
+        y: 0,
+      });
+    }
+    return body;
+  }
+
+  private activateRopes(): boolean {
+    let activated = false;
+    for (const rope of this.ropes) {
+      if (rope.active || this.elapsed < rope.spawnAt) continue;
+      rope.body = this.createPhysicsRope(rope);
+      if (!rope.body) continue;
+      rope.active = true;
+      this.activeRopeCount += 1;
+      rope.view.visible = true;
+      rope.caps[0].visible = true;
+      rope.caps[1].visible = true;
+      activated = true;
+    }
+    return activated;
+  }
+
+  private renderPhysicsRopes(): void {
+    for (const rope of this.ropes) {
+      if (!rope.active || !rope.body || rope.body.isSleeping()) continue;
+      this.updateRenderPoints(rope);
+      (rope.view.geometry as RopeGeometry).update();
+      this.updateRopeCaps(rope);
+    }
+  }
+
+  private updateRenderPoints(rope: RopeBody): void {
+    if (!rope.body) return;
+    const scale = this.settings.physics.pixelsPerMeter;
+    const positions = rope.body.particlePositions();
+    const maximumParticleIndex = positions.length / 2 - 1;
+    const maximumPointIndex = rope.points.length - 1;
+    for (let index = 0; index < rope.points.length; index += 1) {
+      const particlePosition = index / maximumPointIndex * maximumParticleIndex;
+      const particleIndex = Math.min(Math.floor(particlePosition), maximumParticleIndex - 1);
+      const progress = particlePosition - particleIndex;
+      const progressSquared = progress * progress;
+      const progressCubed = progressSquared * progress;
+      const previousIndex = Math.max(0, particleIndex - 1) * 2;
+      const firstIndex = particleIndex * 2;
+      const secondIndex = Math.min(maximumParticleIndex, particleIndex + 1) * 2;
+      const nextIndex = Math.min(maximumParticleIndex, particleIndex + 2) * 2;
+      const previousX = positions[previousIndex];
+      const previousY = positions[previousIndex + 1];
+      const firstX = positions[firstIndex];
+      const firstY = positions[firstIndex + 1];
+      const secondX = positions[secondIndex];
+      const secondY = positions[secondIndex + 1];
+      const nextX = positions[nextIndex];
+      const nextY = positions[nextIndex + 1];
+      rope.points[index].set(
+        0.5 * (
+          2 * firstX
+          + (-previousX + secondX) * progress
+          + (2 * previousX - 5 * firstX + 4 * secondX - nextX) * progressSquared
+          + (-previousX + 3 * firstX - 3 * secondX + nextX) * progressCubed
+        ) * scale,
+        0.5 * (
+          2 * firstY
+          + (-previousY + secondY) * progress
+          + (2 * previousY - 5 * firstY + 4 * secondY - nextY) * progressSquared
+          + (-previousY + 3 * firstY - 3 * secondY + nextY) * progressCubed
+        ) * scale,
+      );
+    }
+  }
+
+  private updateRopeCaps(rope: RopeBody): void {
+    const lastPoint = rope.points[rope.points.length - 1];
+    if (!lastPoint) return;
+    rope.caps[0].position.copyFrom(rope.points[0]);
+    rope.caps[1].position.copyFrom(lastPoint);
+  }
+
+
   private placeSettledRope(
-    body: RopeBody,
+    rope: RopeBody,
     ropeIndex: number,
     ropeCount: number,
     random: () => number,
@@ -335,255 +581,30 @@ export class SpaghettiScene extends Container {
     const rowCount = Math.max(4, Math.ceil(Math.sqrt(ropeCount) * 1.5));
     const row = ropeIndex % rowCount;
     const centerX = this.bowl.centerX + (random() - 0.5) * this.bowl.halfWidth * 1.05;
-    const fillRatio = Math.min(this.score / this.settings.serving.containedScore, 1);
-    const baseY = this.bowl.rimY + this.bowl.depth * (0.72 - fillRatio * 0.38) - row * 4.8
+    const scoreRatio = this.score / this.settings.serving.containedScore;
+    const interiorHeight = this.bowl.depth * 0.72;
+    const overflowHeight = this.bowl.depth * 0.35 * Math.max(0, scoreRatio - 1);
+    const occupiedHeight = interiorHeight * Math.min(scoreRatio, 1) + overflowHeight;
+    const rowSpacing = occupiedHeight / Math.max(1, rowCount - 1);
+    const pileLift = this.bowl.depth * 0.24 * Math.min(scoreRatio, 1);
+    const baseY = this.bowl.rimY + interiorHeight - pileLift - row * rowSpacing
       + (random() - 0.5) * 5;
-    const midpoint = (body.points.length - 1) / 2;
+    const midpoint = (rope.points.length - 1) / 2;
     const wavePhase = random() * Math.PI * 2;
     const waveFrequency = 0.38 + random() * 0.24;
     const waveHeight = 2.4 + random() * 3.4;
+    const renderSpacing = rope.ropeLength / (rope.points.length - 1) * 0.82;
 
-    for (let index = 0; index < body.points.length; index += 1) {
+    for (let index = 0; index < rope.points.length; index += 1) {
       const offset = index - midpoint;
-      const x = centerX + offset * body.segmentLength * 0.82;
+      const x = centerX + offset * renderSpacing;
       const floor = this.bowlFloorY(x);
       const y = Math.min(
         baseY + Math.sin(index * waveFrequency + wavePhase) * waveHeight,
         floor - row * 0.8,
       );
-      body.points[index].set(x, y);
-      body.previous[index].copyFrom(body.points[index]);
+      rope.points[index].set(x, y);
     }
-  }
-
-  private animateSettledRopes(): void {
-    const settling = this.settings.settling;
-    const time = this.elapsed / 1_000;
-    for (const body of this.ropes) {
-      if (!body.sleeping) continue;
-      const blend = Math.min((this.elapsed - body.settledAt) / settling.idleBlendMs, 1);
-      const drift = Math.sin(time * settling.horizontalFrequency + body.idlePhase);
-      const lift = Math.abs(Math.sin(time * settling.verticalFrequency + body.idlePhase * 1.37));
-      body.view.position.set(
-        drift * body.idleStrength * blend,
-        -lift * body.idleStrength * settling.verticalScale * blend,
-      );
-    }
-  }
-
-  private integrate(step: number): void {
-    const physics = this.settings.physics;
-    const gravity = physics.gravity * step * step;
-    for (const body of this.ropes) {
-      if (!body.active || body.sleeping) continue;
-      const damping = this.elapsed - body.spawnAt > physics.settlingDampingAfterMs
-        ? physics.settlingDamping
-        : physics.damping;
-      const spilling = this.bowl && body.spillDirection !== 0
-        && body.points[body.points.length - 1].y >= this.bowl.rimY - this.bowl.depth * 0.4;
-      for (let index = 0; index < body.points.length; index += 1) {
-        const point = body.points[index];
-        const previous = body.previous[index];
-        const velocityX = (point.x - previous.x) * damping;
-        const verticalDamping = body.escapeSides[index] !== 0 && body.landed[index] === 0
-          ? 0.985
-          : damping;
-        const velocityY = (point.y - previous.y) * verticalDamping;
-        previous.copyFrom(point);
-        point.x += velocityX + (spilling ? body.spillDirection * physics.spillForce * step * step : 0);
-        point.y += velocityY + gravity;
-      }
-    }
-  }
-
-  private constrainRope(body: RopeBody): void {
-    for (let index = 0; index < body.points.length - 1; index += 1) {
-      const first = body.points[index];
-      const second = body.points[index + 1];
-      const deltaX = second.x - first.x;
-      const deltaY = second.y - first.y;
-      const distance = Math.hypot(deltaX, deltaY) || 0.0001;
-      const correction = (distance - body.segmentLength) / distance * 0.5;
-      first.x += deltaX * correction;
-      first.y += deltaY * correction;
-      second.x -= deltaX * correction;
-      second.y -= deltaY * correction;
-    }
-  }
-
-  private constrainBend(body: RopeBody): void {
-    this.constrainChord(body, 2, body.segmentLength * 1.9, 0.18);
-    this.constrainChord(body, 4, body.segmentLength * 3.4, 0.07);
-  }
-
-  private constrainChord(body: RopeBody, span: number, minimum: number, stiffness: number): void {
-    for (let index = 0; index < body.points.length - span; index += 1) {
-      const first = body.points[index];
-      const last = body.points[index + span];
-      const deltaX = last.x - first.x;
-      const deltaY = last.y - first.y;
-      const distance = Math.hypot(deltaX, deltaY) || 0.0001;
-      if (distance >= minimum) continue;
-
-      const correction = (minimum - distance) / distance * stiffness;
-      first.x -= deltaX * correction;
-      first.y -= deltaY * correction;
-      last.x += deltaX * correction;
-      last.y += deltaY * correction;
-    }
-  }
-
-  private collideWithBowl(body: RopeBody): void {
-    const bowl = this.bowl;
-    if (!bowl) return;
-    const bowlSettings = this.settings.bowl;
-    const innerHalfWidth = bowl.halfWidth * bowlSettings.innerWidthRatio;
-    const centerDepth = bowl.depth * bowlSettings.floorDepthRatio;
-    for (let index = 0; index < body.points.length; index += 1) {
-      this.collidePointWithBowl(body, index, bowl, innerHalfWidth, centerDepth);
-    }
-  }
-
-  private collidePointWithBowl(
-    body: RopeBody,
-    index: number,
-    bowl: BowlBounds,
-    innerHalfWidth: number,
-    centerDepth: number,
-  ): void {
-    const point = body.points[index];
-    const previous = body.previous[index];
-    let horizontal = point.x - bowl.centerX;
-    let outsideBowl = Math.abs(horizontal) >= innerHalfWidth;
-    if (!body.canSpill && outsideBowl) {
-      point.x = bowl.centerX + Math.sign(horizontal) * (innerHalfWidth - 0.5);
-      previous.x = point.x;
-      horizontal = point.x - bowl.centerX;
-      outsideBowl = false;
-    }
-
-    this.updateEscapeSide(body, index, horizontal, outsideBowl, bowl);
-    const escapeSide = body.escapeSides[index];
-    if (escapeSide !== 0) {
-      const wasLanded = body.landed[index] !== 0;
-      if (this.collideEscapedPoint(
-        point,
-        previous,
-        bowl,
-        innerHalfWidth,
-        escapeSide,
-        wasLanded,
-      )) {
-        body.landed[index] = 1;
-      }
-      return;
-    }
-    if (outsideBowl) return;
-    this.collideContainedPoint(body, index, bowl, horizontal, innerHalfWidth, centerDepth);
-  }
-
-  private updateEscapeSide(
-    body: RopeBody,
-    index: number,
-    horizontal: number,
-    outsideBowl: boolean,
-    bowl: BowlBounds,
-  ): void {
-    if (body.escapeSides[index] === 0 && outsideBowl && body.points[index].y >= bowl.rimY - 2) {
-      body.escapeSides[index] = horizontal < 0 ? -1 : 1;
-    }
-  }
-
-  private collideEscapedPoint(
-    point: Point,
-    previous: Point,
-    bowl: BowlBounds,
-    innerHalfWidth: number,
-    escapeSide: number,
-    wasLanded: boolean,
-  ): boolean {
-    if (!wasLanded) {
-      this.keepEscapedPointBeyondRim(point, previous, bowl, escapeSide, innerHalfWidth);
-    }
-    return this.collideWithCanvasFloor(point, previous, wasLanded);
-  }
-
-  private keepEscapedPointBeyondRim(
-    point: Point,
-    previous: Point,
-    bowl: BowlBounds,
-    escapeSide: number,
-    innerHalfWidth: number,
-  ): void {
-    const edgeX = bowl.centerX + escapeSide * innerHalfWidth;
-    if ((point.x - edgeX) * escapeSide >= 0) return;
-    point.x = edgeX;
-    previous.x = edgeX;
-  }
-
-  private collideContainedPoint(
-    body: RopeBody,
-    index: number,
-    bowl: BowlBounds,
-    horizontal: number,
-    innerHalfWidth: number,
-    centerDepth: number,
-  ): void {
-    const point = body.points[index];
-    const previous = body.previous[index];
-    const bowlFloor = this.bowlFloorY(point.x);
-    const layerWave = horizontal / innerHalfWidth * Math.PI * 1.5 + body.restPhase;
-    const layerFloor = bowl.rimY + bowl.depth * this.settings.bowl.floorDepthRatio - body.stackOffset
-      + horizontal * body.restSlope + Math.sin(layerWave) * 3;
-    const usingLayer = layerFloor < bowlFloor;
-    const floor = usingLayer ? layerFloor : bowlFloor;
-    if (point.y <= floor) return;
-
-    const velocityX = point.x - previous.x;
-    const velocityY = point.y - previous.y;
-    const slope = usingLayer
-      ? body.restSlope + Math.cos(layerWave) * 3 * Math.PI * 1.5 / innerHalfWidth
-      : -2 * centerDepth * horizontal / (innerHalfWidth * innerHalfWidth);
-    const inverseNormalLengthSquared = 1 / (1 + slope * slope);
-    const penetration = point.y - floor;
-    point.x += penetration * slope * inverseNormalLengthSquared;
-    point.y -= penetration * inverseNormalLengthSquared;
-
-    const inverseTangentLength = 1 / Math.sqrt(1 + slope * slope);
-    const tangentX = inverseTangentLength;
-    const tangentY = slope * inverseTangentLength;
-    const surfaceFriction = body.spillDirection === 0
-      ? this.settings.physics.containedFriction
-      : this.settings.physics.spillFriction;
-    const tangentVelocity = (velocityX * tangentX + velocityY * tangentY) * surfaceFriction;
-    previous.x = point.x - tangentX * tangentVelocity;
-    previous.y = point.y - tangentY * tangentVelocity;
-  }
-
-  private collideWithCanvasFloor(point: Point, previous: Point, stayGrounded = false): boolean {
-    const horizontalVelocity = point.x - previous.x;
-    const margin = 12;
-    const rightEdge = this.sceneWidth - margin;
-    let hitSide = false;
-    if (point.x < margin) {
-      point.x = margin;
-      hitSide = true;
-    } else if (point.x > rightEdge) {
-      point.x = rightEdge;
-      hitSide = true;
-    }
-
-    const groundY = this.sceneHeight - 12;
-    if (!stayGrounded && point.y <= groundY) {
-      if (hitSide) previous.x = point.x;
-      return false;
-    }
-
-    point.y = groundY;
-    previous.y = groundY;
-    const friction = stayGrounded ? 0.25 : 0.4;
-    previous.x = hitSide ? point.x : point.x - horizontalVelocity * friction;
-    return true;
   }
 
   private bowlFloorY(x: number): number {
@@ -591,24 +612,12 @@ export class SpaghettiScene extends Container {
     const bowlSettings = this.settings.bowl;
     const innerHalfWidth = this.bowl.halfWidth * bowlSettings.innerWidthRatio;
     const horizontal = x - this.bowl.centerX;
-    if (Math.abs(horizontal) >= innerHalfWidth) return Number.POSITIVE_INFINITY;
+    if (Math.abs(horizontal) > innerHalfWidth) return Number.POSITIVE_INFINITY;
     const normalizedX = horizontal / innerHalfWidth;
     return this.bowl.rimY + 4
       + this.bowl.depth * bowlSettings.floorDepthRatio * (1 - normalizedX * normalizedX);
   }
 
-  private renderRope(body: RopeBody): void {
-    for (let index = 0; index < body.segments.length; index += 1) {
-      const first = body.points[index];
-      const second = body.points[index + 1];
-      const deltaX = second.x - first.x;
-      const deltaY = second.y - first.y;
-      const segment = body.segments[index];
-      segment.position.set((first.x + second.x) / 2, (first.y + second.y) / 2);
-      segment.rotation = Math.atan2(deltaY, deltaX);
-      segment.width = Math.hypot(deltaX, deltaY) + this.settings.render.segmentOverlap;
-    }
-  }
 }
 
 function randomGenerator(seed: number): () => number {

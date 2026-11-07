@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fs;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -32,6 +33,7 @@ struct CodeBusterFinding {
 #[serde(rename_all = "camelCase")]
 pub struct ScanReport {
     pub project_name: String,
+    pub project_version: Option<String>,
     pub path: String,
     pub file_count: u64,
     pub actionable_count: u64,
@@ -64,6 +66,7 @@ pub fn parse_report(
         .filter(|name| !name.is_empty())
         .unwrap_or("project")
         .to_owned();
+    let project_version = project_version(project_path);
     let (score, findings_per_file) = spaghetti_metrics(
         report.files,
         report.actionable_finding_count,
@@ -79,6 +82,7 @@ pub fn parse_report(
 
     Ok(ScanReport {
         project_name,
+        project_version,
         path: project_path.to_string_lossy().into_owned(),
         file_count: report.files,
         actionable_count: report.actionable_finding_count,
@@ -90,6 +94,53 @@ pub fn parse_report(
         groups,
         top_rules,
     })
+}
+
+fn project_version(project_path: &Path) -> Option<String> {
+    ["package.json", "deno.json", "composer.json"]
+        .into_iter()
+        .find_map(|file_name| json_version(&project_path.join(file_name)))
+        .or_else(|| {
+            let cargo = project_path.join("Cargo.toml");
+            toml_version(&cargo, &["package", "version"])
+                .or_else(|| toml_version(&cargo, &["workspace", "package", "version"]))
+        })
+        .or_else(|| {
+            let pyproject = project_path.join("pyproject.toml");
+            toml_version(&pyproject, &["project", "version"])
+                .or_else(|| toml_version(&pyproject, &["tool", "poetry", "version"]))
+        })
+        .or_else(|| pubspec_version(&project_path.join("pubspec.yaml")))
+}
+
+fn json_version(path: &Path) -> Option<String> {
+    let contents = fs::read(path).ok()?;
+    let manifest: serde_json::Value = serde_json::from_slice(&contents).ok()?;
+    clean_version(manifest.get("version")?.as_str()?)
+}
+
+fn toml_version(path: &Path, keys: &[&str]) -> Option<String> {
+    let contents = fs::read_to_string(path).ok()?;
+    let manifest = contents.parse::<toml::Value>().ok()?;
+    let mut value = &manifest;
+    for key in keys {
+        value = value.get(*key)?;
+    }
+    clean_version(value.as_str()?)
+}
+
+fn pubspec_version(path: &Path) -> Option<String> {
+    let contents = fs::read_to_string(path).ok()?;
+    contents.lines().find_map(|line| {
+        let value = line.strip_prefix("version:")?.trim();
+        let value = value.split_once(" #").map_or(value, |(version, _)| version);
+        clean_version(value.trim_matches(['"', '\'']))
+    })
+}
+
+fn clean_version(version: &str) -> Option<String> {
+    let version = version.trim();
+    (!version.is_empty()).then(|| version.to_owned())
 }
 
 fn sorted_counts(counts: BTreeMap<String, u64>, limit: usize) -> Vec<CountedLabel> {
@@ -154,6 +205,39 @@ mod tests {
         assert_eq!(parsed.top_rules[0].count, 2);
         assert_eq!(parsed.groups[0].label, "style");
         assert_eq!(parsed.score, 100);
+    }
+
+    #[test]
+    fn discovers_versions_from_common_root_manifests() {
+        let cases = [
+            ("package.json", r#"{"version":"1.2.3"}"#, "1.2.3"),
+            ("Cargo.toml", "[package]\nversion = \"2.3.4\"\n", "2.3.4"),
+            (
+                "pyproject.toml",
+                "[project]\nversion = \"3.4.5\"\n",
+                "3.4.5",
+            ),
+            (
+                "pubspec.yaml",
+                "name: noodles\nversion: 4.5.6+7\n",
+                "4.5.6+7",
+            ),
+        ];
+
+        for (file_name, contents, expected) in cases {
+            let directory = std::env::temp_dir().join(format!(
+                "spaghetti-meter-version-{}-{}",
+                file_name.replace(['.', '/'], "-"),
+                std::process::id(),
+            ));
+            let _ = fs::remove_dir_all(&directory);
+            fs::create_dir_all(&directory).unwrap();
+            fs::write(directory.join(file_name), contents).unwrap();
+
+            assert_eq!(project_version(&directory).as_deref(), Some(expected));
+
+            fs::remove_dir_all(directory).unwrap();
+        }
     }
 
     #[test]

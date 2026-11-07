@@ -1,26 +1,30 @@
 {
-  "name": "spagetti",
+  "name": "spaghetti-meter",
   "version": "0.1.0",
   "description": "A playful desktop meter for repository spaghetti",
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "npm run licenses:generate && vite build",
     "preview": "vite preview",
     "prepare": "npm run prepare:sidecar",
     "prepare:sidecar": "node scripts/prepare-sidecar.mjs",
+    "licenses:generate": "node scripts/generate-third-party-notices.mjs",
+    "licenses:check": "node scripts/generate-third-party-notices.mjs --check",
     "check": "tsc --noEmit",
     "check:watch": "tsc --noEmit --watch",
     "tauri": "tauri"
   },
   "config": {
-    "codeBusterVersion": "0.11.0"
+    "codeBusterVersion": "0.12.0"
   },
   "license": "MIT",
   "dependencies": {
+    "@dimforge/rapier2d-compat": "0.0.0-b716d37-20260925",
     "@pixi/ui": "^2.4.1",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.8.3",
+    "@tauri-apps/plugin-opener": "2.5.5",
     "pixi.js": "^8.22.0"
   },
   "devDependencies": {

@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { Application, type Ticker } from "pixi.js";
 import { BowlScene } from "../scenes/BowlScene";
 import { InfoScene } from "../scenes/InfoScene";
+import { LicenseDialog } from "../ui/LicenseDialog";
 import { UiButton } from "../ui/UiButton";
 import type { AppState, ScanReport } from "./types";
 
@@ -15,10 +16,11 @@ const INITIAL_STATE: AppState = {
   showingInfo: false,
 };
 
-export class SpagettiApp {
+export class SpaghettiMeterApp {
   private readonly bowlScene: BowlScene;
   private readonly infoScene: InfoScene;
   private readonly infoButton: UiButton;
+  private readonly licenseDialog = new LicenseDialog();
   private readonly motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
   private state: AppState = { ...INITIAL_STATE };
   private reducedMotion = this.motionQuery.matches;
@@ -48,10 +50,13 @@ export class SpagettiApp {
       cancelScan: () => void this.cancelScan(),
       openNewFolder: () => void this.openNewFolder(),
     });
-    this.infoScene = new InfoScene(() => this.showInfo(false));
+    this.infoScene = new InfoScene(
+      () => this.showInfo(false),
+      () => this.licenseDialog.show(),
+    );
     this.infoButton = new UiButton({
       label: "i",
-      accessibleLabel: "How Spagetti works",
+      accessibleLabel: "How Spaghetti Meter works",
       variant: "circle",
       onPress: () => this.showInfo(!this.state.showingInfo),
     });
@@ -74,6 +79,7 @@ export class SpagettiApp {
     this.bowlScene.dispose();
     this.infoScene.destroy({ children: true });
     this.infoButton.destroy({ children: true });
+    this.licenseDialog.destroy();
   }
 
   private async chooseFolder(): Promise<void> {
@@ -149,7 +155,7 @@ export class SpagettiApp {
   private showInfo(showingInfo: boolean): void {
     this.setState({ showingInfo });
     this.infoTarget = showingInfo ? 1 : 0;
-    this.infoButton.setLabel(showingInfo ? "×" : "i", showingInfo ? "Return to the bowl" : "How Spagetti works");
+    this.infoButton.setLabel(showingInfo ? "×" : "i", showingInfo ? "Return to the bowl" : "How Spaghetti Meter works");
     this.infoButton.setActive(showingInfo);
     this.bowlScene.setInteractive(!showingInfo);
     this.infoScene.setInteractive(showingInfo);

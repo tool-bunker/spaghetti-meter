@@ -1,5 +1,6 @@
+import RAPIER from "@dimforge/rapier2d-compat";
 import { Application } from "pixi.js";
-import { SpagettiApp } from "./app/SpagettiApp";
+import { SpaghettiMeterApp } from "./app/SpaghettiMeterApp";
 import { COLORS } from "./ui/theme";
 import "./styles.css";
 
@@ -7,9 +8,12 @@ void (async () => {
   const host = document.querySelector<HTMLDivElement>("#app");
   if (!host) throw new Error("Application host is missing");
 
+  await RAPIER.init();
+
   const app = new Application();
   await app.init({
-    resizeTo: window,
+    width: window.innerWidth,
+    height: window.innerHeight,
     background: COLORS.background,
     antialias: true,
     autoDensity: true,
@@ -28,12 +32,12 @@ void (async () => {
     },
   });
 
-  app.canvas.className = "spagetti-canvas";
+  app.canvas.className = "spaghetti-meter-canvas";
   app.canvas.setAttribute("role", "application");
-  app.canvas.setAttribute("aria-label", "Spagetti project mess meter");
+  app.canvas.setAttribute("aria-label", "Spaghetti Meter project mess meter");
   host.appendChild(app.canvas);
 
-  const controller = new SpagettiApp(app);
+  const controller = new SpaghettiMeterApp(app);
   window.addEventListener("beforeunload", () => {
     controller.dispose();
     app.destroy(
@@ -42,5 +46,5 @@ void (async () => {
     );
   }, { once: true });
 })().catch((error: unknown) => {
-  console.error("Spagetti failed to start", error);
+  console.error("Spaghetti Meter failed to start", error);
 });

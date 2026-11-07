@@ -4,6 +4,7 @@ import process from "node:process";
 const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
+  publicDir: "static",
   clearScreen: false,
   build: {
     outDir: "build",

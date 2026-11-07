@@ -7,6 +7,7 @@ export interface CountedLabel {
 
 export interface ScanReport {
   projectName: string;
+  projectVersion: string | null;
   path: string;
   fileCount: number;
   actionableCount: number;

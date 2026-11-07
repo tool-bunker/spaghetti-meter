@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const version = packageJson.config.codeBusterVersion;
-const target = process.env.SPAGETTI_TARGET?.trim() || hostTarget();
+const target = process.env.SPAGHETTI_METER_TARGET?.trim() || hostTarget();
 const release = releaseFor(target);
 const binariesDirectory = join(root, "src-tauri", "binaries");
 const destination = join(binariesDirectory, `cb-${target}${release.extension}`);
@@ -28,7 +28,7 @@ if (hasExpectedVersion(destination, version)) {
   process.exit(0);
 }
 
-const temporaryDirectory = mkdtempSync(join(tmpdir(), "spagetti-sidecar-"));
+const temporaryDirectory = mkdtempSync(join(tmpdir(), "spaghetti-meter-sidecar-"));
 try {
   const baseUrl = `https://github.com/tool-bunker/code-buster/releases/download/v${version}`;
   const archivePath = join(temporaryDirectory, release.archive);
@@ -92,7 +92,7 @@ function hasExpectedVersion(executable, expectedVersion) {
 
 async function download(url) {
   const response = await fetch(url, {
-    headers: { "User-Agent": "spagetti-sidecar-builder" },
+    headers: { "User-Agent": "spaghetti-meter-sidecar-builder" },
     redirect: "follow",
   });
   if (!response.ok) {
