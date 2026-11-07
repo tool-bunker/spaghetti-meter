@@ -37,14 +37,14 @@ export class UiButton extends Container {
       text: options.label,
       style: {
         fill: isGithub ? 0xffffff : this.variant === "primary" ? COLORS.accentDark : COLORS.action,
-        fontFamily: isCircle ? FONTS.serif : FONTS.sans,
+        fontFamily: isCircle ? FONTS.display : FONTS.sans,
         fontSize: this.variant === "primary" ? 14 : isCircle ? 17 : 12,
-        fontStyle: isCircle ? "italic" : "normal",
+        fontStyle: "normal",
         fontWeight: this.variant === "primary" || isGithub ? "700" : "500",
       },
       anchor: 0.5,
     });
-    this.labelView.visible = this.icon !== "replay";
+    this.labelView.visible = !(isCircle && this.icon !== undefined);
     this.background.eventMode = "none";
     this.labelView.eventMode = "none";
     this.iconView.eventMode = "none";
@@ -151,17 +151,22 @@ export class UiButton extends Container {
     const centerY = this.heightValue / 2;
     this.iconView.clear();
     if (this.icon === "folder") {
-      const iconX = centerX - this.labelView.width / 2 - 19;
-      const iconY = centerY - 5;
+      const circleIcon = this.variant === "circle";
+      const hovered = this.visualState === "hover" || this.visualState === "active";
+      const color = circleIcon
+        ? (hovered ? COLORS.accent : COLORS.action)
+        : COLORS.accentDark;
+      const iconX = circleIcon ? centerX - 9 : centerX - this.labelView.width / 2 - 19;
+      const iconY = circleIcon ? centerY - 4 : centerY - 5;
       this.iconView
         .roundRect(iconX, iconY, 18, 13, 2)
-        .stroke({ color: COLORS.accentDark, width: 2 })
+        .stroke({ color, width: 2 })
         .moveTo(iconX, iconY)
         .lineTo(iconX + 2, iconY - 5)
         .lineTo(iconX + 10, iconY - 5)
         .lineTo(iconX + 12, iconY)
-        .stroke({ color: COLORS.accentDark, width: 2 });
-      this.labelView.position.set(centerX + 8, centerY);
+        .stroke({ color, width: 2 });
+      this.labelView.position.set(circleIcon ? centerX : centerX + 8, centerY);
     } else if (this.icon === "replay") {
       const hovered = this.visualState === "hover" || this.visualState === "active";
       const color = hovered ? COLORS.accent : COLORS.action;

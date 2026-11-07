@@ -1,3 +1,4 @@
+import "@fontsource-variable/space-grotesk";
 import RAPIER from "@dimforge/rapier2d-compat";
 import { Application } from "pixi.js";
 import { SpaghettiMeterApp } from "./app/SpaghettiMeterApp";
@@ -8,7 +9,10 @@ void (async () => {
   const host = document.querySelector<HTMLDivElement>("#app");
   if (!host) throw new Error("Application host is missing");
 
-  await RAPIER.init();
+  await Promise.all([
+    RAPIER.init(),
+    document.fonts.load('700 16px "Space Grotesk Variable"'),
+  ]);
 
   const app = new Application();
   await app.init({

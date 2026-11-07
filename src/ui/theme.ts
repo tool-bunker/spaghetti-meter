@@ -20,7 +20,7 @@ export const COLORS = {
 } as const;
 
 export const FONTS = {
-  sans: "Inter, Arial, sans-serif",
-  serif: "Georgia, Times New Roman, serif",
+  sans: "\"Space Grotesk Variable\", Arial, sans-serif",
+  display: "\"Space Grotesk Variable\", \"Arial Black\", Arial, sans-serif",
   mono: "SFMono-Regular, Consolas, monospace",
 } as const;

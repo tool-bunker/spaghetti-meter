@@ -71,9 +71,21 @@ export class SpaghettiScene extends Container {
     return this.activeRopeCount / this.ropes.length;
   }
 
-  setBowlVisualOffset(offsetX: number): void {
-    if (this.bowlBack) this.bowlBack.x = offsetX;
-    if (this.bowlFront) this.bowlFront.x = offsetX;
+  setBowlVisualTransform(
+    offsetX: number,
+    offsetY: number,
+    scaleX: number,
+    scaleY: number,
+  ): void {
+    if (!this.bowl) return;
+    const pivotX = this.bowl.centerX;
+    const pivotY = this.bowl.rimY + this.bowl.depth * 0.45;
+    for (const layer of [this.bowlBack, this.bowlFront]) {
+      if (!layer) continue;
+      layer.pivot.set(pivotX, pivotY);
+      layer.position.set(pivotX + offsetX, pivotY + offsetY);
+      layer.scale.set(scaleX, scaleY);
+    }
   }
 
   applyRadialImpulse(x: number, y: number, magnitude: number, radius: number): void {

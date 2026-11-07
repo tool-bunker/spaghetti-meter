@@ -21,6 +21,7 @@
   "license": "MIT",
   "dependencies": {
     "@dimforge/rapier2d-compat": "0.0.0-b716d37-20260925",
+    "@fontsource-variable/space-grotesk": "^5.3.0",
     "@pixi/ui": "^2.4.1",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.8.3",

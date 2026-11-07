@@ -20,37 +20,33 @@ export class InfoScene extends Container {
   });
   private readonly title = centeredText("A playful second opinion", {
     fill: COLORS.heading,
-    fontFamily: FONTS.serif,
+    fontFamily: FONTS.display,
     fontSize: 56,
     fontWeight: "500",
     letterSpacing: -2,
     align: "center",
   });
-  private readonly lede = centeredText(
-    "Spaghetti Meter turns Code Buster findings into a deliberately lighthearted score.\nIt is a conversation starter, not a final verdict on your repository.",
-    {
+  private readonly body = new Text({
+    text:
+      "Spaghetti Meter turns Code Buster findings into a deliberately lighthearted score. "
+      + "It is a conversation starter, not a final verdict on your repository.\n\n"
+      + "Take the result with a grain of salt. Every repository has its own context, so if a score feels wrong, trust your judgment. "
+      + "Sharing true positives and false positives is a useful way to help Code Buster improve.\n\n"
+      + "The recipe is 100 × (actionable × 3 + advisory) / max(files, 10). "
+      + "Each actionable finding counts three times, each advisory counts once, and the minimum denominator keeps tiny repositories from exploding. "
+      + "A score of 100 means one weighted finding per analyzed file. Scores through 100 fit in the bowl; anything above 100 overflows.",
+    style: {
       fill: COLORS.body,
       fontFamily: FONTS.sans,
-      fontSize: 14,
-      lineHeight: 23,
-      align: "center",
+      fontSize: 13,
+      lineHeight: 22,
+      align: "left",
       wordWrap: true,
-      wordWrapWidth: 600,
+      wordWrapWidth: 620,
     },
-  );
-  private readonly note = new NoteCard();
-  private readonly formula = new FormulaCard();
-  private readonly feedback = centeredText(
-    "Help Code Buster improve by sharing examples of true positives and false positives.",
-    {
-      fill: COLORS.body,
-      fontFamily: FONTS.sans,
-      fontSize: 12,
-      align: "center",
-      wordWrap: true,
-      wordWrapWidth: 560,
-    },
-  );
+    anchor: { x: 0.5, y: 0 },
+    eventMode: "none",
+  });
   private readonly githubButton: UiButton;
   private readonly licenseButton: UiButton;
   private readonly backButton: UiButton;
@@ -58,9 +54,9 @@ export class InfoScene extends Container {
   constructor(onBack: () => void, onLicenses: () => void) {
     super({ label: "info-scene", eventMode: "none", visible: false, alpha: 0 });
     this.githubButton = new UiButton({
-      label: "GitHub · tool-bunker/code-buster ↗",
+      label: "github.com/tool-bunker/code-buster ↗",
       accessibleLabel: "Open the Code Buster repository on GitHub",
-      variant: "github",
+      variant: "text",
       onPress: () => {
         void openUrl(CODE_BUSTER_REPOSITORY_URL);
       },
@@ -80,10 +76,7 @@ export class InfoScene extends Container {
       this.glow,
       this.eyebrow,
       this.title,
-      this.lede,
-      this.note,
-      this.formula,
-      this.feedback,
+      this.body,
       this.githubButton,
       this.licenseButton,
       this.backButton,
@@ -91,19 +84,16 @@ export class InfoScene extends Container {
     this.title.accessible = true;
     this.title.accessibleType = "h1";
     this.title.accessibleTitle = this.title.text;
-    this.lede.accessible = true;
-    this.lede.accessibleType = "p";
-    this.lede.accessibleTitle = this.lede.text;
-    this.feedback.accessible = true;
-    this.feedback.accessibleType = "p";
-    this.feedback.accessibleTitle = this.feedback.text;
+    this.body.accessible = true;
+    this.body.accessibleType = "p";
+    this.body.accessibleTitle = this.body.text;
   }
 
   resize(width: number, height: number): void {
     const compact = width <= COMPACT_LAYOUT_MAX_WIDTH;
     const centerX = width / 2;
     const contentWidth = Math.min(width - (compact ? 36 : 64), 680);
-    const top = compact ? Math.max(58, height * 0.065) : Math.max(90, height * 0.12);
+    const top = compact ? Math.max(52, height * 0.055) : Math.max(72, height * 0.08);
 
     this.background.clear().rect(0, 0, width, height).fill(COLORS.background);
     this.glow.clear()
@@ -112,33 +102,24 @@ export class InfoScene extends Container {
     this.eyebrow.position.set(centerX, top);
 
     this.title.style.fontSize = compact
-      ? Math.min(44, Math.max(30, width * 0.078))
-      : Math.min(68, Math.max(46, width * 0.05));
+      ? Math.min(42, Math.max(29, width * 0.074))
+      : Math.min(62, Math.max(44, width * 0.048));
     this.title.style.wordWrap = true;
     this.title.style.wordWrapWidth = contentWidth;
-    this.title.position.set(centerX, top + (compact ? 44 : 58));
+    this.title.position.set(centerX, top + (compact ? 42 : 55));
 
-    this.lede.style.fontSize = compact ? 13 : 14;
-    this.lede.style.wordWrapWidth = Math.min(contentWidth, 600);
-    this.lede.position.set(centerX, top + (compact ? 118 : 142));
+    this.body.style.fontSize = compact ? 12 : 13;
+    this.body.style.lineHeight = compact ? 19 : 22;
+    this.body.style.wordWrapWidth = Math.min(contentWidth, 620);
+    const bodyTop = top + (compact ? 92 : 116);
+    this.body.position.set(centerX, bodyTop);
 
-    const noteY = top + (compact ? 190 : 205);
-    const noteHeight = compact ? 142 : 136;
-    this.note.resize(contentWidth, noteHeight);
-    this.note.position.set(centerX - contentWidth / 2, noteY);
+    const githubY = bodyTop + this.body.height + 12;
+    const githubWidth = Math.min(350, contentWidth);
+    this.githubButton.resize(githubWidth, 30);
+    this.githubButton.position.set(centerX - githubWidth / 2, githubY);
 
-    const formulaY = noteY + noteHeight + 12;
-    this.formula.resize(contentWidth, 98);
-    this.formula.position.set(centerX - contentWidth / 2, formulaY);
-
-    this.feedback.style.wordWrapWidth = contentWidth;
-    this.feedback.position.set(centerX, formulaY + 119);
-
-    const githubWidth = Math.min(330, contentWidth);
-    this.githubButton.resize(githubWidth, 44);
-    this.githubButton.position.set(centerX - githubWidth / 2, formulaY + 141);
-
-    const footerY = formulaY + 199;
+    const footerY = githubY + 42;
     const footerWidth = Math.min(190, (contentWidth - 8) / 2);
     this.licenseButton.resize(footerWidth, 28);
     this.licenseButton.position.set(centerX - footerWidth - 4, footerY);
@@ -151,108 +132,6 @@ export class InfoScene extends Container {
   }
 }
 
-class NoteCard extends Container {
-  private readonly panel = new Graphics();
-  private readonly eyebrow = centeredText("A PINCH OF SALT", {
-    fill: COLORS.red,
-    fontFamily: FONTS.mono,
-    fontSize: 10,
-    fontWeight: BOLD_FONT_WEIGHT,
-    letterSpacing: 2,
-  });
-  private readonly title = centeredText("Useful signal, not a final verdict.", {
-    fill: COLORS.project,
-    fontFamily: FONTS.serif,
-    fontSize: 20,
-    fontWeight: "500",
-    align: "center",
-  });
-  private readonly copy = centeredText(
-    "Every repository has its own context. If a result feels wrong, trust your judgment—and help Code Buster improve by sharing what was a true positive or a false positive.",
-    {
-      fill: COLORS.muted,
-      fontFamily: FONTS.sans,
-      fontSize: 12,
-      lineHeight: 18,
-      align: "center",
-      wordWrap: true,
-    },
-  );
-
-  constructor() {
-    super({ eventMode: "none" });
-    this.addChild(this.panel, this.eyebrow, this.title, this.copy);
-    this.accessible = true;
-    this.accessibleType = "section";
-    this.accessibleTitle = "Take the Spaghetti Meter score with a grain of salt. Useful signal, not a final verdict. Every repository has its own context.";
-  }
-
-  resize(width: number, height: number): void {
-    this.panel.clear()
-      .roundRect(0, 0, width, height, 14)
-      .fill(COLORS.panel)
-      .stroke({ color: COLORS.panelBorder, width: 1 });
-    this.eyebrow.position.set(width / 2, 22);
-    this.title.style.wordWrap = true;
-    this.title.style.wordWrapWidth = width - 32;
-    this.title.position.set(width / 2, 52);
-    this.copy.style.wordWrapWidth = width - 40;
-    this.copy.position.set(width / 2, height - 42);
-  }
-}
-
-class FormulaCard extends Container {
-  private readonly panel = new Graphics();
-  private readonly eyebrow = centeredText("THE RECIPE", {
-    fill: COLORS.red,
-    fontFamily: FONTS.mono,
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 2,
-  });
-  private readonly formula = centeredText(
-    "100 × (actionable × 3 + advisory) / max(files, 10)",
-    {
-      fill: COLORS.accent,
-      fontFamily: FONTS.mono,
-      fontSize: 12,
-      fontWeight: "600",
-      align: "center",
-      wordWrap: true,
-    },
-  );
-  private readonly copy = centeredText(
-    "Scores through 100 fit in the bowl. Anything above 100 overflows.",
-    {
-      fill: COLORS.muted,
-      fontFamily: FONTS.sans,
-      fontSize: 11,
-      align: "center",
-      wordWrap: true,
-    },
-  );
-
-  constructor() {
-    super({ eventMode: "none" });
-    this.addChild(this.panel, this.eyebrow, this.formula, this.copy);
-    this.accessible = true;
-    this.accessibleType = "section";
-    this.accessibleTitle = "The recipe. 100 times actionable times 3 plus advisory, divided by the greater of files or 10. Scores through 100 fit in the bowl. Anything above 100 overflows.";
-  }
-
-  resize(width: number, height: number): void {
-    this.panel.clear()
-      .rect(0, 0, width, height)
-      .fill({ color: COLORS.accent, alpha: 0.025 })
-      .stroke({ color: COLORS.accent, alpha: 0.18, width: 1 });
-    this.eyebrow.position.set(width / 2, 18);
-    this.formula.style.wordWrapWidth = width - 24;
-    this.formula.position.set(width / 2, 45);
-    this.formula.style.fontSize = width < 460 ? 10 : 12;
-    this.copy.style.wordWrapWidth = width - 24;
-    this.copy.position.set(width / 2, height - 20);
-  }
-}
 
 function centeredText(text: string, style: TextStyleOptions): Text {
   return new Text({ text, style, anchor: 0.5, eventMode: "none" });

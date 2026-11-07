@@ -33,6 +33,11 @@ const STAMP_DROP_DURATION_SECONDS = 0.28;
 const STAMP_SETTLE_DURATION_SECONDS = 0.18;
 const STAMP_START_SCALE_MULTIPLIER = 3.4;
 const STAMP_IMPACT_SCALE_MULTIPLIER = 0.82;
+const VERDICT_STAMP_DELAY_SECONDS = 0.08;
+const VERDICT_STAMP_DROP_SECONDS = 0.26;
+const VERDICT_STAMP_SETTLE_SECONDS = 0.16;
+const VERDICT_STAMP_START_SCALE = 2.35;
+const VERDICT_STAMP_IMPACT_SCALE = 0.78;
 
 interface BowlSceneActions {
   chooseFolder: () => void;
@@ -41,17 +46,24 @@ interface BowlSceneActions {
 }
 
 export class BowlScene extends Container {
+  private readonly impactCamera = new Container({ label: "impact-camera" });
   private readonly backdrop = new Graphics();
   private readonly bowlEffects = new BowlEffects();
   private readonly spaghetti = new SpaghettiScene();
   private readonly selectButton: UiButton;
   private readonly replayButton: UiButton;
+  private readonly newFolderButton: UiButton;
+  private readonly projectMetaGroup = new Container({
+    label: "project-name-and-version",
+    eventMode: "none",
+  });
+  private readonly projectMetaBackground = new Graphics({ eventMode: "none" });
   private readonly projectMeta = centeredText("", {
-    fill: COLORS.project,
+    fill: 0xffffff,
     fontFamily: FONTS.mono,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
   });
   private readonly scanGroup = new Container({ label: "scan-message", eventMode: "none" });
   private readonly scanText = new BitmapText({
@@ -83,9 +95,9 @@ export class BowlScene extends Container {
     text: "0",
     style: {
       fill: 0xffffff,
-      fontFamily: FONTS.serif,
-      fontSize: 26,
-      fontWeight: BOLD_FONT_WEIGHT,
+      fontFamily: FONTS.display,
+      fontSize: 28,
+      fontWeight: "700",
     },
     anchor: 0.5,
     eventMode: "none",
@@ -93,20 +105,11 @@ export class BowlScene extends Container {
   });
   private readonly titleText = centeredText("", {
     fill: COLORS.heading,
-    fontFamily: FONTS.serif,
-    fontSize: 30,
-    fontWeight: "500",
-    letterSpacing: -0.7,
+    fontFamily: FONTS.display,
+    fontSize: 34,
+    fontWeight: "700",
+    letterSpacing: -1.1,
     align: "center",
-  });
-  private readonly copyText = centeredText("", {
-    fill: COLORS.body,
-    fontFamily: FONTS.sans,
-    fontSize: 12,
-    lineHeight: 19,
-    align: "center",
-    wordWrap: true,
-    wordWrapWidth: 520,
   });
   private readonly actionButton: UiButton;
   private readonly errorTitle = centeredText("Could not fill the bowl.", {
@@ -145,6 +148,9 @@ export class BowlScene extends Container {
   private scoreStampActive = false;
   private scoreStampLanded = false;
   private scoreStampImpactTriggered = false;
+  private verdictStampElapsed = 0;
+  private verdictStampActive = false;
+  private verdictStampLanded = false;
 
   private readonly handleSpaghettiPointerDown = (event: FederatedPointerEvent): void => {
     const report = this.state.report;
@@ -184,13 +190,18 @@ export class BowlScene extends Container {
         this.rebuildSpaghettiIfNeeded(true);
       },
     });
+    this.newFolderButton = new UiButton({
+      label: "Open new folder",
+      accessibleLabel: "Clear bowl and open a new folder",
+      accessibleHint: "Choose another project to measure",
+      variant: "circle",
+      icon: "folder",
+      onPress: actions.openNewFolder,
+    });
     this.actionButton = new UiButton({
       label: "Cancel scan",
       variant: "text",
-      onPress: () => {
-        if (this.state.status === "scanning") actions.cancelScan();
-        else if (this.state.status === "complete") actions.openNewFolder();
-      },
+      onPress: actions.cancelScan,
     });
 
     this.spaghettiInteraction.hitArea = this.spaghettiHitArea;
@@ -204,7 +215,9 @@ export class BowlScene extends Container {
       this.scoreBadgeRing,
       this.scoreText,
     );
-    this.addChild(
+    this.projectMetaGroup.addChild(this.projectMetaBackground, this.projectMeta);
+    this.projectMetaGroup.accessibleType = "div";
+    this.impactCamera.addChild(
       this.backdrop,
       this.bowlEffects,
       this.spaghetti,
@@ -213,19 +226,18 @@ export class BowlScene extends Container {
       this.scoreBadge,
       this.selectButton,
       this.replayButton,
+      this.newFolderButton,
       this.scanGroup,
-      this.projectMeta,
+      this.projectMetaGroup,
       this.titleText,
-      this.copyText,
       this.actionButton,
       this.errorTitle,
       this.errorText,
     );
+    this.addChild(this.impactCamera);
 
     this.titleText.accessible = true;
     this.titleText.accessibleType = "h1";
-    this.copyText.accessible = true;
-    this.copyText.accessibleType = "p";
     this.scoreText.accessible = true;
     this.scoreText.accessibleType = "div";
     this.scanText.accessibleType = "div";
@@ -261,8 +273,10 @@ export class BowlScene extends Container {
 
     this.selectButton.position.set(centerX - 95, top);
     this.replayButton.position.set(20, top);
+    this.newFolderButton.position.set(64, top);
     const scoreBadgeY = this.scoreBadgeY(bowl);
     this.scoreBadge.position.set(bowl.centerX, scoreBadgeY);
+    this.layoutProjectMeta();
     this.spaghettiHitArea.x = 0;
     this.spaghettiHitArea.y = 0;
     this.spaghettiHitArea.width = width;
@@ -273,22 +287,16 @@ export class BowlScene extends Container {
     this.scanText.position.set(0, 0);
 
     const resultTop = Math.max(rimY + depth * 1.55, height - (compact ? 245 : 235));
-    this.projectMeta.position.set(centerX, resultTop);
-
-    const titleY = resultTop + 40;
-    this.titleText.style.fontSize = Math.min(38, Math.max(23, width * 0.038));
+    this.titleText.style.fontSize = Math.min(56, Math.max(34, width * 0.055));
     this.titleText.style.wordWrap = true;
-    this.titleText.style.wordWrapWidth = Math.min(width - HORIZONTAL_GUTTER, 620);
-    this.titleText.position.set(centerX, titleY);
-
-    this.copyText.style.wordWrapWidth = Math.min(width - 42, 520);
-    this.copyText.position.set(centerX, titleY + 40);
+    this.titleText.style.wordWrapWidth = Math.min(width - HORIZONTAL_GUTTER, 700);
+    this.layoutVerdictTitle();
 
     this.actionButton.resize(Math.min(220, width - HORIZONTAL_GUTTER), 28);
-    this.actionButton.position.set(centerX - this.actionButton.width / 2, titleY + 72);
-    this.errorTitle.position.set(centerX, titleY + 72);
+    this.actionButton.position.set(centerX - this.actionButton.width / 2, resultTop + 72);
+    this.errorTitle.position.set(centerX, resultTop + 72);
     this.errorText.style.wordWrapWidth = Math.min(width - 42, 520);
-    this.errorText.position.set(centerX, titleY + 94);
+    this.errorText.position.set(centerX, resultTop + 94);
 
     this.rebuildSpaghettiIfNeeded(true);
   }
@@ -300,6 +308,7 @@ export class BowlScene extends Container {
     this.bowlEffects.update(ticker);
     this.applyEffects();
     this.updateScoreStamp(ticker);
+    this.updateVerdictStamp(ticker);
     this.applyResultVisibility();
   }
 
@@ -321,30 +330,30 @@ export class BowlScene extends Container {
     const verdict = describeScore(report?.score);
 
     this.selectButton.visible = showSelect;
-    const showReplay = status === "complete" && report !== null && report.score > 0;
+    const complete = status === "complete" && report !== null;
+    const showReplay = complete && report.score > 0;
     this.replayButton.visible = showReplay;
     this.replayButton.setEnabled(showReplay);
+    this.newFolderButton.visible = complete;
+    this.newFolderButton.setEnabled(complete);
     this.selectButton.setEnabled(showSelect);
     this.updateSpaghettiInteraction();
     this.projectMeta.text = formatProjectLabel(projectName, report?.projectVersion);
-    this.projectMeta.accessibleTitle = report?.projectVersion
+    this.projectMetaGroup.accessibleTitle = report?.projectVersion
       ? `Project ${projectName}, version ${report.projectVersion}`
       : `Project ${projectName}`;
+    this.updateProjectMetaLabel();
+    this.layoutProjectMeta();
     this.applyScoreState(report);
     this.updateProgressMessage(projectName);
 
-    this.titleText.text = status === "scanning" ? "Measuring the spaghetti…" : verdict.label;
-    this.titleText.accessibleTitle = this.titleText.text;
-    this.copyText.text = status === "scanning"
-      ? "Code Buster is reading the project locally."
-      : verdict.copy;
-    this.copyText.accessibleTitle = this.copyText.text;
+    this.titleText.text = verdict.label.toUpperCase();
+    this.titleText.accessibleTitle = verdict.label;
+    this.layoutVerdictTitle();
 
-    this.actionButton.visible = status === "complete" || status === "scanning";
-    this.actionButton.setEnabled(this.actionButton.visible);
-    this.actionButton.setLabel(
-      status === "scanning" ? "Cancel scan" : "Clear bowl · open new folder",
-    );
+    const scanning = status === "scanning";
+    this.actionButton.visible = scanning;
+    this.actionButton.setEnabled(scanning);
 
     this.errorTitle.visible = status === "error";
     this.errorText.visible = status === "error";
@@ -374,19 +383,13 @@ export class BowlScene extends Container {
 
   private applyResultVisibility(): void {
     const complete = this.state.status === "complete" && this.state.report !== null;
-    const showFinalResult = !complete
-      || this.reducedMotion
-      || this.spaghetti.productionProgress >= 1;
-    this.projectMeta.visible = complete && showFinalResult;
-    this.projectMeta.accessible = this.projectMeta.visible;
-    this.titleText.visible = showFinalResult;
-    this.titleText.accessible = showFinalResult;
-    this.copyText.visible = showFinalResult;
-    this.copyText.accessible = showFinalResult;
-    if (complete) {
-      this.actionButton.visible = showFinalResult;
-      this.actionButton.setEnabled(showFinalResult);
-    }
+    const showProjectMeta = this.projectMeta.text.trim().length > 0;
+    const showVerdict = complete
+      && (this.reducedMotion || this.verdictStampActive || this.verdictStampLanded);
+    this.projectMetaGroup.visible = showProjectMeta;
+    this.projectMetaGroup.accessible = showProjectMeta;
+    this.titleText.visible = showVerdict;
+    this.titleText.accessible = showVerdict;
   }
 
   private updateScore(): void {
@@ -442,6 +445,43 @@ export class BowlScene extends Container {
     this.spaghettiInteraction.cursor = enabled ? "crosshair" : "default";
   }
 
+  private updateProjectMetaLabel(): void {
+    const paddingX = 11;
+    const paddingY = 5;
+    this.projectMetaBackground.clear()
+      .roundRect(
+        -this.projectMeta.width / 2 - paddingX,
+        -this.projectMeta.height / 2 - paddingY,
+        this.projectMeta.width + paddingX * 2,
+        this.projectMeta.height + paddingY * 2,
+        4,
+      )
+      .fill({ color: 0x111111, alpha: 0.92 });
+  }
+
+  private layoutProjectMeta(): void {
+    if (!this.bowl) return;
+    const badgeScale = this.scoreBadgeBaseScale();
+    this.projectMetaGroup.position.set(
+      this.bowl.centerX,
+      this.scoreBadgeY(this.bowl) + SCORE_BADGE_RADIUS * badgeScale + 16,
+    );
+  }
+
+  private verdictTitleY(): number {
+    const scaleY = Math.max(0.001, Math.abs(this.titleText.scale.y));
+    const titleHalfHeight = this.titleText.height / scaleY / 2;
+    return this.projectMetaGroup.y
+      + this.projectMetaBackground.height / 2
+      + titleHalfHeight
+      + 16;
+  }
+
+  private layoutVerdictTitle(): void {
+    if (!this.bowl) return;
+    this.titleText.position.set(this.bowl.centerX, this.verdictTitleY());
+  }
+
   private scoreBadgeY(bowl: BowlBounds): number {
     return bowl.rimY + bowl.depth * 0.46;
   }
@@ -462,7 +502,7 @@ export class BowlScene extends Container {
     const normalizedScore = Math.max(0, Math.floor(score));
     this.scoreText.text = String(normalizedScore);
     const digitCount = this.scoreText.text.length;
-    this.scoreText.style.fontSize = Math.max(14, 26 - Math.max(0, digitCount - 3) * 5);
+    this.scoreText.style.fontSize = Math.max(15, 28 - Math.max(0, digitCount - 3) * 5);
     const color = scoreColor(normalizedScore);
     this.scoreText.tint = color;
     this.scoreBadgeRing.tint = color;
@@ -474,9 +514,12 @@ export class BowlScene extends Container {
     this.scoreStampActive = false;
     this.scoreStampLanded = false;
     this.scoreStampImpactTriggered = false;
+    this.resetVerdictStamp();
+    this.bowlEffects.hideStaticImpact();
     const report = this.state.report;
     if (this.reducedMotion && report) {
       this.showStaticScoreBadge(report.score);
+      this.showStaticVerdictTitle();
     } else {
       this.setScoreBadgeVisible(false);
     }
@@ -492,6 +535,14 @@ export class BowlScene extends Container {
       this.scoreBadge.position.set(this.bowl.centerX, this.scoreBadgeY(this.bowl));
     }
     this.scoreBadge.scale.set(this.scoreBadgeBaseScale());
+    if (this.bowl) {
+      this.bowlEffects.showStaticImpact(
+        this.bowl.centerX,
+        this.scoreBadgeY(this.bowl),
+        SCORE_BADGE_RADIUS * this.scoreBadgeBaseScale() * 1.75,
+        score,
+      );
+    }
   }
 
   private startScoreStamp(score: number): void {
@@ -543,6 +594,94 @@ export class BowlScene extends Container {
     }
   }
 
+  private resetVerdictStamp(): void {
+    this.verdictStampElapsed = 0;
+    this.verdictStampActive = false;
+    this.verdictStampLanded = false;
+    this.titleText.rotation = 0;
+    this.titleText.scale.set(1);
+    this.titleText.alpha = 1;
+    this.layoutVerdictTitle();
+  }
+
+  private showStaticVerdictTitle(): void {
+    this.verdictStampActive = false;
+    this.verdictStampLanded = true;
+    this.titleText.rotation = 0;
+    this.titleText.scale.set(1);
+    this.titleText.alpha = 1;
+    this.layoutVerdictTitle();
+  }
+
+  private startVerdictStamp(): void {
+    this.verdictStampElapsed = 0;
+    this.verdictStampActive = true;
+    this.verdictStampLanded = false;
+    this.titleText.alpha = 0;
+    this.applyVerdictStampTransform();
+  }
+
+  private updateVerdictStamp(ticker: Ticker): void {
+    if (this.state.status !== "complete" || !this.state.report) return;
+    if (this.reducedMotion) {
+      if (!this.verdictStampLanded) this.showStaticVerdictTitle();
+      return;
+    }
+    if ((!this.scoreStampActive && !this.scoreStampLanded)
+      || this.scoreStampElapsed < VERDICT_STAMP_DELAY_SECONDS) return;
+
+    const deltaSeconds = Math.min(ticker.deltaMS / 1_000, 0.05);
+    if (!this.verdictStampActive && !this.verdictStampLanded) {
+      this.startVerdictStamp();
+    }
+    if (!this.verdictStampActive) return;
+
+    const totalDuration = VERDICT_STAMP_DROP_SECONDS + VERDICT_STAMP_SETTLE_SECONDS;
+    this.verdictStampElapsed = Math.min(
+      totalDuration,
+      this.verdictStampElapsed + deltaSeconds,
+    );
+    this.applyVerdictStampTransform();
+    if (this.verdictStampElapsed >= totalDuration) {
+      this.verdictStampActive = false;
+      this.verdictStampLanded = true;
+      this.titleText.rotation = 0;
+      this.titleText.scale.set(1);
+      this.titleText.alpha = 1;
+      this.layoutVerdictTitle();
+    }
+  }
+
+  private applyVerdictStampTransform(): void {
+    if (!this.bowl) return;
+    const finalX = this.bowl.centerX;
+    const finalY = this.verdictTitleY();
+    if (this.verdictStampElapsed < VERDICT_STAMP_DROP_SECONDS) {
+      const progress = this.verdictStampElapsed / VERDICT_STAMP_DROP_SECONDS;
+      const smashProgress = progress ** 3;
+      const scale = VERDICT_STAMP_START_SCALE
+        + (VERDICT_STAMP_IMPACT_SCALE - VERDICT_STAMP_START_SCALE) * smashProgress;
+      this.titleText.position.set(finalX, finalY);
+      this.titleText.rotation = 0;
+      this.titleText.scale.set(scale);
+      this.titleText.alpha = Math.min(1, progress * 3);
+      return;
+    }
+
+    const progress = Math.min(
+      1,
+      (this.verdictStampElapsed - VERDICT_STAMP_DROP_SECONDS)
+        / VERDICT_STAMP_SETTLE_SECONDS,
+    );
+    const settleProgress = 1 - (1 - progress) ** 3;
+    const scale = VERDICT_STAMP_IMPACT_SCALE
+      + (1 - VERDICT_STAMP_IMPACT_SCALE) * settleProgress;
+    this.titleText.position.set(finalX, finalY);
+    this.titleText.rotation = 0;
+    this.titleText.scale.set(scale);
+    this.titleText.alpha = 1;
+  }
+
   private applyScoreStampTransform(): void {
     if (!this.bowl) return;
     const finalScale = this.scoreBadgeBaseScale();
@@ -577,14 +716,12 @@ export class BowlScene extends Container {
 
   private triggerScoreStampImpact(): void {
     if (!this.bowl) return;
+    const score = this.state.report?.score ?? 0;
+    const x = this.bowl.centerX;
+    const y = this.scoreBadgeY(this.bowl);
     const radius = Math.min(260, Math.max(160, this.bowl.halfWidth * 1.05));
-    this.triggerSpaghettiImpact(
-      this.bowl.centerX,
-      this.scoreBadgeY(this.bowl),
-      STAMP_IMPULSE_MAGNITUDE,
-      radius,
-      scoreColor(this.state.report?.score ?? 0),
-    );
+    this.spaghetti.applyRadialImpulse(x, y, STAMP_IMPULSE_MAGNITUDE, radius);
+    this.bowlEffects.triggerStampImpact(x, y, radius, score);
   }
 
   private triggerSpaghettiImpact(
@@ -604,7 +741,16 @@ export class BowlScene extends Container {
         this.scoreBadgeBaseScale() * this.bowlEffects.scoreScale,
       );
     }
-    this.spaghetti.setBowlVisualOffset(this.bowlEffects.bowlOffsetX);
+    this.spaghetti.setBowlVisualTransform(
+      this.bowlEffects.bowlOffsetX,
+      this.bowlEffects.bowlOffsetY,
+      this.bowlEffects.bowlScaleX,
+      this.bowlEffects.bowlScaleY,
+    );
+    this.impactCamera.position.set(
+      this.bowlEffects.cameraOffsetX,
+      this.bowlEffects.cameraOffsetY,
+    );
   }
 
   private rebuildSpaghettiIfNeeded(force = false): void {

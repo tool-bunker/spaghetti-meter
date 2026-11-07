@@ -23,6 +23,7 @@ body {
   min-width: 320px;
   min-height: 560px;
   background: #fff;
+  font-family: "Space Grotesk Variable", Arial, sans-serif;
 }
 
 .spaghetti-meter-canvas {
@@ -66,7 +67,7 @@ body {
 
 .license-dialog__header h1 {
   margin: 0;
-  font: 500 24px/1.2 Georgia, "Times New Roman", serif;
+  font: 600 24px/1.2 "Space Grotesk Variable", Arial, sans-serif;
 }
 
 .license-dialog__close {
@@ -77,7 +78,7 @@ body {
   background: transparent;
   border: 1px solid #cfc8c1;
   border-radius: 50%;
-  font: 24px/1 Arial, sans-serif;
+  font: 24px/1 "Space Grotesk Variable", Arial, sans-serif;
   cursor: pointer;
 }
 

@@ -2,6 +2,7 @@ import { Container, Graphics, type Ticker } from "pixi.js";
 import type { BowlBounds } from "../spaghetti/geometry";
 import { SPAGHETTI_SETTINGS } from "../spaghetti/settings";
 import { COLORS } from "../ui/theme";
+import { StampImpactEffects } from "./StampImpactEffects";
 
 const SCORE_RED_AT = 200;
 const PARTICLE_COUNT = 20;
@@ -35,6 +36,7 @@ export class BowlEffects extends Container {
   private readonly rimFlash = new Graphics({ eventMode: "none" });
   private readonly particles: BurstParticle[];
   private readonly shockwaves: Shockwave[];
+  private readonly stampImpact = new StampImpactEffects();
   readonly foreground = new Container({ label: "bowl-effects-foreground", eventMode: "none" });
   private bowl: BowlBounds | undefined;
   private score = 0;
@@ -80,8 +82,9 @@ export class BowlEffects extends Container {
         endRadius: 0,
       };
     });
-    this.addChild(this.glow, this.warmPulse);
+    this.addChild(this.glow, this.warmPulse, this.stampImpact.backdrop);
     this.foreground.addChild(
+      this.stampImpact,
       ...this.shockwaves.map((shockwave) => shockwave.view),
       ...this.particles.map((particle) => particle.view),
       this.rimFlash,
@@ -97,6 +100,26 @@ export class BowlEffects extends Container {
     return this.currentBowlOffsetX;
   }
 
+  get bowlOffsetY(): number {
+    return this.stampImpact.bowlOffsetY;
+  }
+
+  get bowlScaleX(): number {
+    return this.stampImpact.bowlScaleX;
+  }
+
+  get bowlScaleY(): number {
+    return this.stampImpact.bowlScaleY;
+  }
+
+  get cameraOffsetX(): number {
+    return this.stampImpact.cameraOffsetX;
+  }
+
+  get cameraOffsetY(): number {
+    return this.stampImpact.cameraOffsetY;
+  }
+
   setVisible(visible: boolean): void {
     this.visible = visible;
     this.foreground.visible = visible;
@@ -104,6 +127,7 @@ export class BowlEffects extends Container {
 
   resize(width: number, height: number, bowl: BowlBounds): void {
     this.bowl = bowl;
+    this.stampImpact.resize(width, height);
     this.glow.clear()
       .ellipse(
         bowl.centerX,
@@ -124,6 +148,7 @@ export class BowlEffects extends Container {
   setReducedMotion(reducedMotion: boolean): void {
     if (this.reducedMotion === reducedMotion) return;
     this.reducedMotion = reducedMotion;
+    this.stampImpact.setReducedMotion(reducedMotion);
     if (reducedMotion) this.clearTransientEffects();
   }
 
@@ -221,6 +246,18 @@ export class BowlEffects extends Container {
     selected.view.visible = true;
   }
 
+  triggerStampImpact(x: number, y: number, radius: number, score: number): void {
+    this.stampImpact.trigger(x, y, radius, score, scoreColor(score));
+  }
+
+  showStaticImpact(x: number, y: number, radius: number, score: number): void {
+    this.stampImpact.showStatic(x, y, radius, scoreColor(score));
+  }
+
+  hideStaticImpact(): void {
+    this.stampImpact.hideStatic();
+  }
+
   update(ticker: Ticker): void {
     if (this.reducedMotion) return;
     const deltaSeconds = Math.min(ticker.deltaMS / 1_000, 0.05);
@@ -230,6 +267,7 @@ export class BowlEffects extends Container {
     this.updateWobble(deltaSeconds);
     this.updateParticles(deltaSeconds);
     this.updateShockwaves(deltaSeconds);
+    this.stampImpact.update(deltaSeconds);
   }
 
   private updateGlow(): void {
@@ -354,6 +392,7 @@ export class BowlEffects extends Container {
     this.warmPulse.alpha = 0;
     for (const particle of this.particles) particle.view.visible = false;
     for (const shockwave of this.shockwaves) shockwave.view.visible = false;
+    this.stampImpact.clear();
   }
 }
 
