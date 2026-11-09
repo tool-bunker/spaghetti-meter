@@ -1,6 +1,6 @@
 import "@fontsource-variable/space-grotesk";
 import RAPIER from "@dimforge/rapier2d-compat";
-import { Application } from "pixi.js";
+import { Application, Assets, type Texture } from "pixi.js";
 import { SpaghettiMeterApp } from "./app/SpaghettiMeterApp";
 import { COLORS } from "./ui/theme";
 import "./styles.css";
@@ -9,9 +9,14 @@ void (async () => {
   const host = document.querySelector<HTMLDivElement>("#app");
   if (!host) throw new Error("Application host is missing");
 
-  await Promise.all([
+  const [, , bowlTexture] = await Promise.all([
     RAPIER.init(),
     document.fonts.load('700 16px "Space Grotesk Variable"'),
+    Assets.load<Texture>({
+      alias: "spaghetti-bowl",
+      src: "/bowl.svg",
+      data: { resolution: 2 },
+    }),
   ]);
 
   const app = new Application();
@@ -41,7 +46,7 @@ void (async () => {
   app.canvas.setAttribute("aria-label", "Spaghetti Meter project mess meter");
   host.appendChild(app.canvas);
 
-  const controller = new SpaghettiMeterApp(app);
+  const controller = new SpaghettiMeterApp(app, bowlTexture);
   window.addEventListener("beforeunload", () => {
     controller.dispose();
     app.destroy(

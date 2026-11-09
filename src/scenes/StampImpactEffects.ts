@@ -1,4 +1,4 @@
-import { Container, Graphics } from "pixi.js";
+import { Container, FillGradient, Graphics } from "pixi.js";
 import { SPAGHETTI_SETTINGS } from "../spaghetti/settings";
 import { COLORS } from "../ui/theme";
 
@@ -16,6 +16,14 @@ const INNER_WAVE_DURATION_SECONDS = 0.24;
 const RAY_DURATION_SECONDS = 0.18;
 const BOWL_COMPRESSION_DURATION_SECONDS = 0.36;
 const CAMERA_PUNCH_DURATION_SECONDS = 0.14;
+const FLOUR_DUST_COUNT = 30;
+const AMBIENT_DEBRIS_COUNT = 14;
+const BLOOM_DURATION_SECONDS = 0.38;
+const DUST_GRAVITY = -18;
+const AFTERSHOCK_DURATION_SECONDS = 0.3;
+const HIGHLIGHT_DURATION_SECONDS = 0.48;
+const SCREEN_FLASH_DURATION_SECONDS = 0.11;
+const SCORE_ECHO_DURATION_SECONDS = 0.4;
 
 interface ImpactParticle {
   readonly view: Graphics;
@@ -30,6 +38,22 @@ interface ConfettiParticle extends ImpactParticle {
   baseScale: number;
   flutterPhase: number;
   flutterSpeed: number;
+}
+
+interface DustParticle extends ImpactParticle {
+  baseAlpha: number;
+  baseScale: number;
+}
+
+interface AmbientDebris {
+  readonly view: Graphics;
+  originX: number;
+  originY: number;
+  phase: number;
+  speed: number;
+  driftX: number;
+  driftY: number;
+  baseAlpha: number;
 }
 
 interface ImpactRay {
@@ -59,6 +83,16 @@ export class StampImpactEffects extends Container {
   private readonly cornerConfetti: ConfettiParticle[];
   private readonly rays: ImpactRay[];
   private readonly waves: ImpactWave[];
+  private readonly impactBloom = createImpactBloom();
+  private readonly flourDust: DustParticle[];
+  private readonly ambientDebris: AmbientDebris[];
+  private readonly screenFlash = new Graphics({ eventMode: "none" });
+  private readonly scoreEchoes = [createScoreEcho(), createScoreEcho(), createScoreEcho()] as const;
+  private readonly scoreEchoAges = [
+    SCORE_ECHO_DURATION_SECONDS,
+    SCORE_ECHO_DURATION_SECONDS,
+    SCORE_ECHO_DURATION_SECONDS,
+  ];
   private readonly staticRing = new Graphics({ eventMode: "none" })
     .circle(0, 0, 1)
     .fill({ color: 0xffffff, alpha: 0.035 })
@@ -70,6 +104,13 @@ export class StampImpactEffects extends Container {
   private viewportWidth = 0;
   private viewportHeight = 0;
   private backdropMinimumLength = 0;
+  private bloomAge = BLOOM_DURATION_SECONDS;
+  private bloomRadius = 0;
+  private ambientDebrisActive = false;
+  private ambientDebrisAge = 0;
+  private aftershockAge = AFTERSHOCK_DURATION_SECONDS;
+  private screenFlashAge = SCREEN_FLASH_DURATION_SECONDS;
+  private highlightAge = HIGHLIGHT_DURATION_SECONDS;
   private rayAge = RAY_DURATION_SECONDS;
   private compressionAge = BOWL_COMPRESSION_DURATION_SECONDS;
   private cameraPunchAge = CAMERA_PUNCH_DURATION_SECONDS;
@@ -77,6 +118,9 @@ export class StampImpactEffects extends Container {
   private currentBowlOffsetY = 0;
   private currentBowlScaleX = 1;
   private currentBowlScaleY = 1;
+  private currentAftershockOffsetY = 0;
+  private currentAftershockScaleX = 1;
+  private currentAftershockScaleY = 1;
   private currentCameraOffsetX = 0;
   private currentCameraOffsetY = 0;
 
@@ -93,7 +137,19 @@ export class StampImpactEffects extends Container {
         targetLength: 0,
       };
     });
-    this.backdrop.addChild(...this.backdropRays.map((ray) => ray.view));
+    this.flourDust = Array.from(
+      { length: FLOUR_DUST_COUNT },
+      (_, index) => createDustParticle(index),
+    );
+    this.ambientDebris = Array.from(
+      { length: AMBIENT_DEBRIS_COUNT },
+      (_, index) => createAmbientDebris(index),
+    );
+    this.backdrop.addChild(
+      ...this.backdropRays.map((ray) => ray.view),
+      this.impactBloom,
+      ...this.ambientDebris.map((particle) => particle.view),
+    );
     this.backdrop.visible = false;
     this.noodleFragments = Array.from(
       { length: NOODLE_FRAGMENT_COUNT },
@@ -120,8 +176,11 @@ export class StampImpactEffects extends Container {
     ];
     this.staticRing.visible = false;
     this.addChild(
+      this.screenFlash,
+      ...this.scoreEchoes,
       ...this.rays.map((ray) => ray.view),
       ...this.waves.map((wave) => wave.view),
+      ...this.flourDust.map((particle) => particle.view),
       ...this.noodleFragments.map((particle) => particle.view),
       ...this.sauceDroplets.map((particle) => particle.view),
       ...this.cornerConfetti.map((particle) => particle.view),
@@ -132,19 +191,22 @@ export class StampImpactEffects extends Container {
   resize(width: number, height: number): void {
     this.viewportWidth = width;
     this.viewportHeight = height;
+    this.screenFlash.clear()
+      .rect(0, 0, width, height)
+      .fill(0xffffff);
     if (this.backdropRayActive) this.updateBackdropRayLengths();
   }
 
   get bowlOffsetY(): number {
-    return this.currentBowlOffsetY;
+    return this.currentBowlOffsetY + this.currentAftershockOffsetY;
   }
 
   get bowlScaleX(): number {
-    return this.currentBowlScaleX;
+    return this.currentBowlScaleX * this.currentAftershockScaleX;
   }
 
   get bowlScaleY(): number {
-    return this.currentBowlScaleY;
+    return this.currentBowlScaleY * this.currentAftershockScaleY;
   }
 
   get cameraOffsetX(): number {
@@ -155,6 +217,16 @@ export class StampImpactEffects extends Container {
     return this.currentCameraOffsetY;
   }
 
+  get highlightProgress(): number {
+    return Math.min(1, this.highlightAge / HIGHLIGHT_DURATION_SECONDS);
+  }
+
+  get highlightAlpha(): number {
+    if (this.highlightAge >= HIGHLIGHT_DURATION_SECONDS) return 0;
+    const progress = this.highlightProgress;
+    return Math.sin(progress * Math.PI) * 0.74;
+  }
+
   setReducedMotion(reducedMotion: boolean): void {
     if (this.reducedMotion === reducedMotion) return;
     this.reducedMotion = reducedMotion;
@@ -162,20 +234,40 @@ export class StampImpactEffects extends Container {
     if (!reducedMotion) this.staticRing.visible = false;
   }
 
-  trigger(x: number, y: number, radius: number, score: number, color: number): void {
+  trigger(
+    x: number,
+    y: number,
+    radius: number,
+    score: number,
+    color: number,
+    rimY: number,
+    footY: number,
+  ): void {
     if (this.reducedMotion) return;
     this.staticRing.visible = false;
     const scoreRatio = Math.min(1.5, Math.max(0, score) / 200);
     this.impactIntensity = 0.78 + scoreRatio * 0.28;
     this.triggerBackdropRays(x, y, radius, score, color);
+    this.triggerBloom(x, y, radius);
     this.triggerWaves(x, y, radius, color);
     this.triggerRays(x, y, radius, score, color);
     this.triggerParticles(x, y, score, scoreRatio);
+    this.triggerFlourDust(x, rimY, footY, radius);
+    this.triggerAmbientDebris(x, y, radius);
     this.triggerCornerConfetti(score, color);
+    this.triggerScreenFlash(color);
+    this.triggerScoreEchoes(x, y, radius, color);
     this.compressionAge = 0;
+    this.aftershockAge = AFTERSHOCK_DURATION_SECONDS;
+    this.highlightAge = 0;
     this.cameraPunchAge = 0;
     this.updateCompression(0);
     this.updateCameraPunch(0);
+  }
+
+  triggerAftershock(): void {
+    if (this.reducedMotion) return;
+    this.aftershockAge = 0;
   }
 
   showStatic(x: number, y: number, radius: number, color: number): void {
@@ -193,19 +285,76 @@ export class StampImpactEffects extends Container {
 
   update(deltaSeconds: number): void {
     if (this.reducedMotion) return;
+    this.updateScreenFlash(deltaSeconds);
+    this.updateScoreEchoes(deltaSeconds);
     this.updateBackdropRays(deltaSeconds);
+    this.updateBloom(deltaSeconds);
+    this.updateAmbientDebris(deltaSeconds);
     this.updateWaves(deltaSeconds);
     this.updateRays(deltaSeconds);
+    this.updateDust(deltaSeconds);
     this.updateParticles(this.noodleFragments, deltaSeconds);
     this.updateParticles(this.sauceDroplets, deltaSeconds);
     this.updateCornerConfetti(deltaSeconds);
     this.updateCompression(deltaSeconds);
+    this.updateAftershock(deltaSeconds);
+    this.updateHighlight(deltaSeconds);
     this.updateCameraPunch(deltaSeconds);
   }
 
   clear(): void {
     this.clearTransient();
     this.staticRing.visible = false;
+  }
+
+  private triggerScreenFlash(color: number): void {
+    this.screenFlashAge = 0;
+    this.screenFlash.tint = color;
+    this.screenFlash.alpha = 0.17;
+    this.screenFlash.visible = true;
+  }
+
+  private triggerScoreEchoes(x: number, y: number, radius: number, color: number): void {
+    for (let index = 0; index < this.scoreEchoes.length; index += 1) {
+      const echo = this.scoreEchoes[index];
+      this.scoreEchoAges[index] = -index * 0.045;
+      echo.position.set(x, y);
+      echo.scale.set(radius * 0.16);
+      echo.tint = color;
+      echo.alpha = 0;
+      echo.visible = true;
+    }
+  }
+
+  private updateScreenFlash(deltaSeconds: number): void {
+    if (this.screenFlashAge >= SCREEN_FLASH_DURATION_SECONDS) return;
+    this.screenFlashAge = Math.min(
+      SCREEN_FLASH_DURATION_SECONDS,
+      this.screenFlashAge + deltaSeconds,
+    );
+    const progress = this.screenFlashAge / SCREEN_FLASH_DURATION_SECONDS;
+    this.screenFlash.alpha = (1 - progress) ** 3 * 0.17;
+    if (progress >= 1) this.screenFlash.visible = false;
+  }
+
+  private updateScoreEchoes(deltaSeconds: number): void {
+    for (let index = 0; index < this.scoreEchoes.length; index += 1) {
+      const echo = this.scoreEchoes[index];
+      const age = Math.min(
+        SCORE_ECHO_DURATION_SECONDS,
+        this.scoreEchoAges[index] + deltaSeconds,
+      );
+      this.scoreEchoAges[index] = age;
+      if (age < 0) continue;
+      if (age >= SCORE_ECHO_DURATION_SECONDS) {
+        echo.visible = false;
+        continue;
+      }
+      const progress = age / SCORE_ECHO_DURATION_SECONDS;
+      const radius = 20 + (1 - (1 - progress) ** 3) * 190;
+      echo.scale.set(radius);
+      echo.alpha = (1 - progress) ** 2 * 0.62;
+    }
   }
 
   private triggerWaves(x: number, y: number, radius: number, color: number): void {
@@ -231,8 +380,8 @@ export class StampImpactEffects extends Container {
       ray.view.position.set(x, y);
       ray.view.rotation = angle;
       ray.view.scale.set(ray.targetLength * 0.2, 1 + (index % 3) * 0.28);
-      ray.view.tint = color;
-      ray.view.alpha = 0.82;
+      ray.view.tint = index % 3 === 0 ? color : COLORS.highlight;
+      ray.view.alpha = 0.58;
       ray.view.visible = true;
     }
   }
@@ -263,10 +412,10 @@ export class StampImpactEffects extends Container {
         continue;
       }
       const angle = index / activeCount * Math.PI * 2 + (index % 2) * 0.045;
-      ray.baseAlpha = 0.18 + scoreRatio * 0.14 + (index % 3) * 0.02;
+      ray.baseAlpha = 0.07 + scoreRatio * 0.055 + (index % 3) * 0.008;
       ray.view.rotation = angle;
       ray.view.scale.set(ray.targetLength * 0.025, 1 + (index % 4) * 0.18);
-      ray.view.tint = index % 3 === 0 ? COLORS.accentHover : color;
+      ray.view.tint = index % 4 === 0 ? color : COLORS.accent;
       ray.view.alpha = 0;
       ray.view.visible = true;
     }
@@ -281,6 +430,109 @@ export class StampImpactEffects extends Container {
       const ray = this.backdropRays[index];
       if (!ray) continue;
       ray.targetLength = baseLength * (1.02 + (index % 5) * 0.025);
+    }
+  }
+
+  private triggerBloom(x: number, y: number, radius: number): void {
+    this.backdrop.position.set(x, y);
+    this.bloomAge = 0;
+    this.bloomRadius = radius;
+    this.impactBloom.position.set(0, 0);
+    this.impactBloom.scale.set(radius * 0.18);
+    this.impactBloom.alpha = 0;
+    this.impactBloom.visible = true;
+  }
+
+  private triggerFlourDust(
+    centerX: number,
+    rimY: number,
+    footY: number,
+    radius: number,
+  ): void {
+    const perBand = this.flourDust.length / 2;
+    for (let index = 0; index < this.flourDust.length; index += 1) {
+      const particle = this.flourDust[index];
+      if (!particle) continue;
+      const bandIndex = index % perBand;
+      const side = bandIndex / (perBand - 1) * 2 - 1;
+      const atRim = index < perBand;
+      const spread = atRim ? radius * 0.78 : radius * 0.34;
+      particle.view.position.set(
+        centerX + side * spread,
+        (atRim ? rimY : footY) + (index % 3 - 1) * 3,
+      );
+      particle.baseScale = 0.75 + (index % 5) * 0.18;
+      particle.view.scale.set(particle.baseScale);
+      particle.baseAlpha = atRim ? 0.22 : 0.16;
+      particle.view.alpha = 0;
+      particle.view.visible = true;
+      particle.velocityX = side * (26 + (index % 4) * 8);
+      particle.velocityY = -(24 + (index % 6) * 6);
+      particle.spin = 0;
+      particle.age = 0;
+      particle.lifetime = 0.72 + (index % 5) * 0.08;
+    }
+  }
+
+  private triggerAmbientDebris(_x: number, _y: number, radius: number): void {
+    this.ambientDebrisActive = true;
+    this.ambientDebrisAge = 0;
+    for (let index = 0; index < this.ambientDebris.length; index += 1) {
+      const particle = this.ambientDebris[index];
+      if (!particle) continue;
+      const angle = index / this.ambientDebris.length * Math.PI * 2 + (index % 3) * 0.17;
+      const distance = radius * (0.62 + (index % 5) * 0.11);
+      particle.originX = Math.cos(angle) * distance;
+      particle.originY = Math.sin(angle) * distance * 0.72;
+      particle.phase = index * 0.83;
+      particle.view.position.set(particle.originX, particle.originY);
+      particle.view.rotation = angle;
+      particle.view.alpha = 0;
+      particle.view.visible = true;
+    }
+  }
+
+  private updateBloom(deltaSeconds: number): void {
+    if (this.bloomAge >= BLOOM_DURATION_SECONDS) return;
+    this.bloomAge = Math.min(BLOOM_DURATION_SECONDS, this.bloomAge + deltaSeconds);
+    const progress = this.bloomAge / BLOOM_DURATION_SECONDS;
+    const expansion = 0.18 + (1 - (1 - progress) ** 3) * 1.18;
+    this.impactBloom.scale.set(this.bloomRadius * expansion);
+    this.impactBloom.alpha = Math.sin(Math.min(1, progress * 1.45) * Math.PI) * 0.46;
+    if (progress >= 1) this.impactBloom.visible = false;
+  }
+
+  private updateDust(deltaSeconds: number): void {
+    for (const particle of this.flourDust) {
+      if (!particle.view.visible) continue;
+      particle.age += deltaSeconds;
+      if (particle.age >= particle.lifetime) {
+        particle.view.visible = false;
+        continue;
+      }
+      const progress = particle.age / particle.lifetime;
+      particle.velocityY += DUST_GRAVITY * deltaSeconds;
+      particle.view.x += particle.velocityX * deltaSeconds;
+      particle.view.y += particle.velocityY * deltaSeconds;
+      const expansion = 1 + progress * 0.9;
+      particle.view.scale.set(particle.baseScale * expansion);
+      particle.view.alpha = Math.sin(progress * Math.PI) * particle.baseAlpha;
+    }
+  }
+
+  private updateAmbientDebris(deltaSeconds: number): void {
+    if (!this.ambientDebrisActive) return;
+    this.ambientDebrisAge = Math.min(1, this.ambientDebrisAge + deltaSeconds);
+    const fadeIn = this.ambientDebrisAge;
+    for (const particle of this.ambientDebris) {
+      if (!particle.view.visible) continue;
+      particle.phase += deltaSeconds * particle.speed;
+      particle.view.position.set(
+        particle.originX + Math.sin(particle.phase) * particle.driftX,
+        particle.originY + Math.cos(particle.phase * 0.83) * particle.driftY,
+      );
+      particle.view.rotation += deltaSeconds * 0.16;
+      particle.view.alpha = particle.baseAlpha * fadeIn;
     }
   }
 
@@ -458,6 +710,31 @@ export class StampImpactEffects extends Container {
     this.currentBowlScaleY = 1 - 0.072 * amount * this.impactIntensity;
   }
 
+  private updateAftershock(deltaSeconds: number): void {
+    if (this.aftershockAge >= AFTERSHOCK_DURATION_SECONDS) {
+      this.currentAftershockOffsetY = 0;
+      this.currentAftershockScaleX = 1;
+      this.currentAftershockScaleY = 1;
+      return;
+    }
+    this.aftershockAge = Math.min(
+      AFTERSHOCK_DURATION_SECONDS,
+      this.aftershockAge + deltaSeconds,
+    );
+    const progress = this.aftershockAge / AFTERSHOCK_DURATION_SECONDS;
+    const amount = Math.cos(progress * Math.PI * 3) * (1 - progress);
+    this.currentAftershockOffsetY = 3.2 * amount;
+    this.currentAftershockScaleX = 1 + 0.014 * amount;
+    this.currentAftershockScaleY = 1 - 0.026 * amount;
+  }
+
+  private updateHighlight(deltaSeconds: number): void {
+    this.highlightAge = Math.min(
+      HIGHLIGHT_DURATION_SECONDS,
+      this.highlightAge + deltaSeconds,
+    );
+  }
+
   private updateCameraPunch(deltaSeconds: number): void {
     if (this.cameraPunchAge >= CAMERA_PUNCH_DURATION_SECONDS) {
       this.currentCameraOffsetX = 0;
@@ -479,23 +756,105 @@ export class StampImpactEffects extends Container {
     this.backdropRayAge = 0;
     this.backdropDriftPhase = 0;
     this.backdropMinimumLength = 0;
+    this.screenFlashAge = SCREEN_FLASH_DURATION_SECONDS;
     this.rayAge = RAY_DURATION_SECONDS;
+    this.bloomAge = BLOOM_DURATION_SECONDS;
+    this.bloomRadius = 0;
+    this.ambientDebrisActive = false;
+    this.ambientDebrisAge = 0;
     this.compressionAge = BOWL_COMPRESSION_DURATION_SECONDS;
+    this.aftershockAge = AFTERSHOCK_DURATION_SECONDS;
+    this.highlightAge = HIGHLIGHT_DURATION_SECONDS;
     this.cameraPunchAge = CAMERA_PUNCH_DURATION_SECONDS;
     this.currentBowlOffsetY = 0;
     this.currentBowlScaleX = 1;
     this.currentBowlScaleY = 1;
+    this.currentAftershockOffsetY = 0;
+    this.currentAftershockScaleX = 1;
+    this.currentAftershockScaleY = 1;
     this.currentCameraOffsetX = 0;
     this.currentCameraOffsetY = 0;
     this.backdrop.visible = false;
     this.backdrop.rotation = 0;
+    this.impactBloom.visible = false;
+    this.screenFlash.visible = false;
+    for (let index = 0; index < this.scoreEchoes.length; index += 1) {
+      this.scoreEchoAges[index] = SCORE_ECHO_DURATION_SECONDS;
+      this.scoreEchoes[index].visible = false;
+    }
     for (const ray of this.backdropRays) ray.view.visible = false;
     for (const ray of this.rays) ray.view.visible = false;
     for (const wave of this.waves) wave.view.visible = false;
+    for (const particle of this.flourDust) particle.view.visible = false;
+    for (const particle of this.ambientDebris) particle.view.visible = false;
     for (const particle of this.noodleFragments) particle.view.visible = false;
     for (const particle of this.sauceDroplets) particle.view.visible = false;
     for (const particle of this.cornerConfetti) particle.view.visible = false;
   }
+}
+
+function createScoreEcho(): Graphics {
+  const echo = new Graphics({ eventMode: "none" })
+    .circle(0, 0, 1)
+    .stroke({ color: 0xffffff, alpha: 0.92, width: 0.025 });
+  echo.visible = false;
+  return echo;
+}
+
+function createImpactBloom(): Graphics {
+  const gradient = new FillGradient({
+    type: "radial",
+    center: { x: 0.5, y: 0.5 },
+    innerRadius: 0,
+    outerCenter: { x: 0.5, y: 0.5 },
+    outerRadius: 0.5,
+    colorStops: [
+      { offset: 0, color: "rgba(255,248,221,0.95)" },
+      { offset: 0.34, color: "rgba(255,216,0,0.48)" },
+      { offset: 1, color: "rgba(255,216,0,0)" },
+    ],
+  });
+  const view = new Graphics({ eventMode: "none" })
+    .circle(0, 0, 1)
+    .fill(gradient);
+  view.visible = false;
+  return view;
+}
+
+function createDustParticle(index: number): DustParticle {
+  const radius = 3 + index % 4;
+  const view = new Graphics({ eventMode: "none" })
+    .ellipse(0, 0, radius * 1.4, radius)
+    .fill({ color: 0xfff2cf, alpha: 0.72 });
+  view.visible = false;
+  return {
+    view,
+    velocityX: 0,
+    velocityY: 0,
+    spin: 0,
+    age: 0,
+    lifetime: 0,
+    baseAlpha: 0,
+    baseScale: 1,
+  };
+}
+
+function createAmbientDebris(index: number): AmbientDebris {
+  const colors = SPAGHETTI_SETTINGS.strand.colors;
+  const view = new Graphics({ eventMode: "none" })
+    .roundRect(-3, -0.8, 6, 1.6, 0.8)
+    .fill(colors[index % colors.length] ?? COLORS.highlight);
+  view.visible = false;
+  return {
+    view,
+    originX: 0,
+    originY: 0,
+    phase: 0,
+    speed: 0.18 + (index % 5) * 0.025,
+    driftX: 4 + (index % 4) * 1.5,
+    driftY: 3 + (index % 3) * 1.4,
+    baseAlpha: 0.055 + (index % 3) * 0.012,
+  };
 }
 
 function createConfettiParticle(index: number): ConfettiParticle {

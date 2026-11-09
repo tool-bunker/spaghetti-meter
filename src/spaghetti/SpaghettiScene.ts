@@ -6,7 +6,6 @@ import {
 } from "@dimforge/rapier2d-compat";
 import {
   Container,
-  FillGradient,
   Graphics,
   MeshRope,
   Point,
@@ -35,6 +34,26 @@ interface RopeBody {
   spawnAt: number;
   active: boolean;
 }
+// Normalized inner edge sampled from static/bowl.svg, ordered rim-to-center.
+const BOWL_INNER_PROFILE = [
+  [0.941009, 0.032093],
+  [0.938383, 0.090374],
+  [0.927515, 0.173355],
+  [0.903413, 0.274627],
+  [0.861083, 0.387777],
+  [0.795534, 0.506395],
+  [0.701770, 0.624069],
+  [0.574801, 0.734388],
+  [0.409633, 0.830941],
+  [0.398377, 0.840313],
+  [0.394237, 0.853339],
+  [0.394237, 0.948987],
+  [0, 0.948987],
+] as const;
+const BOWL_INNER_RIM_RATIO = BOWL_INNER_PROFILE[0][0];
+const BOWL_INNER_FOOT_RATIO = BOWL_INNER_PROFILE[11][0];
+const BOWL_INNER_BASE_DEPTH_RATIO = BOWL_INNER_PROFILE[11][1];
+
 
 
 export class SpaghettiScene extends Container {
@@ -46,6 +65,7 @@ export class SpaghettiScene extends Container {
   private bowl: BowlBounds | undefined;
   private bowlBack: Container | undefined;
   private bowlFront: Container | undefined;
+  private bowlHighlight: Sprite | undefined;
   private world: World | undefined;
   private ropes: RopeBody[] = [];
   private elapsed = 0;
@@ -54,8 +74,13 @@ export class SpaghettiScene extends Container {
   private reducedMotion = false;
   private activeRopeCount = 0;
   private readonly impulseCenter = { x: 0, y: 0 };
+  private readonly particlePosition = { x: 0, y: 0 };
+  private readonly particleImpulse = { x: 0, y: 0 };
 
-  constructor(settings: SpaghettiSettings = SPAGHETTI_SETTINGS) {
+  constructor(
+    private readonly bowlTexture: Texture,
+    settings: SpaghettiSettings = SPAGHETTI_SETTINGS,
+  ) {
     super({ label: "spaghetti-scene", eventMode: "none" });
     this.settings = settings;
     const texture = this.createSegmentTexture();
@@ -88,8 +113,15 @@ export class SpaghettiScene extends Container {
     }
   }
 
+  setBowlHighlight(_progress: number, alpha: number): void {
+    const highlight = this.bowlHighlight;
+    if (!highlight) return;
+    highlight.alpha = Math.max(0, Math.min(1, alpha)) * 0.72;
+    highlight.visible = highlight.alpha > 0;
+  }
+
   applyRadialImpulse(x: number, y: number, magnitude: number, radius: number): void {
-    if (this.reducedMotion || !this.world || magnitude <= 0 || radius <= 0) return;
+    if (this.reducedMotion || !this.world || magnitude === 0 || radius <= 0) return;
     const scale = this.settings.physics.pixelsPerMeter;
     this.impulseCenter.x = x / scale;
     this.impulseCenter.y = y / scale;
@@ -102,6 +134,26 @@ export class SpaghettiScene extends Container {
         radiusInMeters,
         true,
       );
+    }
+  }
+
+  applyHorizontalPull(centerX: number, magnitude: number, radius: number): void {
+    if (this.reducedMotion || !this.world || magnitude <= 0 || radius <= 0) return;
+    const scale = this.settings.physics.pixelsPerMeter;
+    const centerInMeters = centerX / scale;
+    const radiusInMeters = radius / scale;
+    for (const rope of this.ropes) {
+      const body = rope.body;
+      if (!rope.active || !body) continue;
+      for (let index = 0; index < rope.particleCount; index += 1) {
+        body.particlePosition(index, this.particlePosition);
+        const offset = centerInMeters - this.particlePosition.x;
+        const distanceRatio = Math.min(1, Math.abs(offset) / radiusInMeters);
+        if (distanceRatio >= 1) continue;
+        this.particleImpulse.x = Math.sign(offset) * magnitude * (1 - distanceRatio);
+        this.particleImpulse.y = -magnitude * 0.08;
+        body.applyParticleImpulse(index, this.particleImpulse, true);
+      }
     }
   }
 
@@ -123,6 +175,7 @@ export class SpaghettiScene extends Container {
     this.ropes = [];
     this.bowlBack = undefined;
     this.bowlFront = undefined;
+    this.bowlHighlight = undefined;
     this.elapsed = 0;
     this.accumulator = 0;
     this.activeRopeCount = 0;
@@ -169,6 +222,7 @@ export class SpaghettiScene extends Container {
     this.ropes = [];
     this.bowlBack = undefined;
     this.bowlFront = undefined;
+    this.bowlHighlight = undefined;
     this.activeRopeCount = 0;
     if (this.ownsSegmentTexture) this.segmentTexture.destroy(true);
     if (this.ownsCapTexture) this.capTexture.destroy(true);
@@ -185,20 +239,33 @@ export class SpaghettiScene extends Container {
     world.integrationParameters.softBodiesMaxExtraSubsteps = physics.maximumExtraSubsteps;
 
     const scale = physics.pixelsPerMeter;
-    const innerHalfWidth = this.bowl.halfWidth * this.settings.bowl.innerWidthRatio;
-    const left = this.bowl.centerX - innerHalfWidth;
-    const bowlVertices = new Float32Array((this.settings.bowl.physicsSegments + 1) * 2);
-    for (let index = 0; index <= this.settings.bowl.physicsSegments; index += 1) {
-      const progress = index / this.settings.bowl.physicsSegments;
-      const x = left + progress * innerHalfWidth * 2;
-      bowlVertices[index * 2] = x / scale;
-      bowlVertices[index * 2 + 1] = this.bowlFloorY(x) / scale;
+    const colliderPoints = BOWL_INNER_PROFILE.map(([xRatio, depthRatio]) => ({
+      x: this.bowl!.centerX - this.bowl!.halfWidth * xRatio,
+      y: this.bowl!.rimY + this.bowl!.depth * depthRatio,
+    }));
+    for (let index = BOWL_INNER_PROFILE.length - 2; index >= 0; index -= 1) {
+      const [xRatio, depthRatio] = BOWL_INNER_PROFILE[index];
+      colliderPoints.push({
+        x: this.bowl.centerX + this.bowl.halfWidth * xRatio,
+        y: this.bowl.rimY + this.bowl.depth * depthRatio,
+      });
     }
-    world.createCollider(
-      ColliderDesc.polyline(bowlVertices)
-        .setFriction(physics.friction)
-        .setRestitution(0),
-    );
+    const floorThickness = 10;
+    for (let index = 0; index < colliderPoints.length - 1; index += 1) {
+      const start = colliderPoints[index];
+      const end = colliderPoints[index + 1];
+      if (!start || !end) continue;
+      const deltaX = end.x - start.x;
+      const deltaY = end.y - start.y;
+      const length = Math.hypot(deltaX, deltaY);
+      world.createCollider(
+        ColliderDesc.cuboid((length + 2) / 2 / scale, floorThickness / 2 / scale)
+          .setTranslation((start.x + end.x) / 2 / scale, (start.y + end.y) / 2 / scale)
+          .setRotation(Math.atan2(deltaY, deltaX))
+          .setFriction(physics.friction)
+          .setRestitution(0),
+      );
+    }
     const boundaryInset = physics.viewportBoundaryInset;
     const boundaryThickness = physics.viewportBoundaryThickness;
     const wallHalfHeight = (height - boundaryInset) / 2 + boundaryThickness;
@@ -240,45 +307,14 @@ export class SpaghettiScene extends Container {
   private drawBowlBack(): void {
     if (!this.bowl) return;
     const { centerX, rimY, halfWidth, depth } = this.bowl;
-    const openingFill = new FillGradient({
-      type: "linear",
-      end: { x: 0, y: 1 },
-      colorStops: [
-        { offset: 0, color: 0xcfd2d2 },
-        { offset: 0.5, color: 0xe9eaea },
-        { offset: 1, color: 0xfafafa },
-      ],
-    });
-    const footFill = new FillGradient({
-      type: "linear",
-      end: { x: 0, y: 1 },
-      colorStops: [
-        { offset: 0, color: 0xf2f3f3 },
-        { offset: 1, color: 0xd7d9d9 },
-      ],
-    });
-
-    const shadow = new Graphics()
-      .ellipse(centerX, rimY + depth * 1.08, halfWidth * 0.68, depth * 0.075)
-      .fill({ color: 0x6d7272, alpha: 0.16 });
-    const footWidth = halfWidth * 0.4;
-    const foot = new Graphics()
-      .roundRect(
-        centerX - footWidth / 2,
-        rimY + depth * 0.89,
-        footWidth,
-        depth * 0.17,
-        depth * 0.045,
-      )
-      .fill(footFill)
-      .stroke({ color: 0xc7caca, alpha: 0.8, width: 1 });
-    const opening = new Graphics()
-      .ellipse(centerX, rimY, halfWidth, depth * 0.09)
-      .fill(openingFill)
-      .stroke({ color: 0xd7dada, width: 1.5 });
-
+    const wideShadow = new Graphics()
+      .ellipse(centerX, rimY + depth * 1.045, halfWidth * 0.76, depth * 0.075)
+      .fill({ color: 0x050312, alpha: 0.22 });
+    const contactShadow = new Graphics()
+      .ellipse(centerX, rimY + depth * 1.025, halfWidth * 0.5, depth * 0.035)
+      .fill({ color: 0x050312, alpha: 0.5 });
     const back = new Container({ label: "bowl-back", eventMode: "none" });
-    back.addChild(shadow, foot, opening);
+    back.addChild(wideShadow, contactShadow);
     this.bowlBack = back;
     this.addChild(back);
   }
@@ -286,73 +322,61 @@ export class SpaghettiScene extends Container {
   private drawBowlOutline(): void {
     if (!this.bowl) return;
     const { centerX, rimY, halfWidth, depth } = this.bowl;
-    const left = centerX - halfWidth;
-    const right = centerX + halfWidth;
-    const ceramicFill = new FillGradient({
-      type: "linear",
-      end: { x: 0, y: 1 },
-      colorStops: [
-        { offset: 0, color: 0xffffff },
-        { offset: 0.48, color: 0xf5f6f6 },
-        { offset: 0.82, color: 0xe5e7e7 },
-        { offset: 1, color: 0xd2d5d5 },
-      ],
+    const outline = new Sprite({
+      texture: this.bowlTexture,
+      eventMode: "none",
     });
+    outline.anchor.set(0.5, 0);
+    outline.position.set(centerX, rimY);
+    outline.width = halfWidth * 2;
+    outline.height = depth;
 
-    const body = new Graphics()
-      .moveTo(left, rimY)
-      .quadraticCurveTo(centerX, rimY + depth * 0.11, right, rimY)
-      .bezierCurveTo(
-        right - halfWidth * 0.03,
-        rimY + depth * 0.48,
-        centerX + halfWidth * 0.48,
-        rimY + depth * 0.88,
-        centerX + halfWidth * 0.2,
-        rimY + depth * 0.95,
-      )
-      .quadraticCurveTo(
-        centerX,
-        rimY + depth,
-        centerX - halfWidth * 0.2,
-        rimY + depth * 0.95,
-      )
-      .bezierCurveTo(
-        centerX - halfWidth * 0.48,
-        rimY + depth * 0.88,
-        left + halfWidth * 0.03,
-        rimY + depth * 0.48,
-        left,
-        rimY,
-      )
-      .closePath()
-      .fill(ceramicFill)
-      .stroke({ color: 0xcfd2d2, width: 1.5, join: "round" });
-    const rim = new Graphics()
-      .moveTo(left, rimY)
-      .quadraticCurveTo(centerX, rimY + depth * 0.11, right, rimY)
-      .stroke({ color: 0xc6caca, width: 2, cap: "round" });
-    const highlight = new Graphics()
-      .moveTo(left + halfWidth * 0.14, rimY + depth * 0.1)
-      .bezierCurveTo(
-        left + halfWidth * 0.2,
-        rimY + depth * 0.28,
-        centerX - halfWidth * 0.48,
-        rimY + depth * 0.5,
-        centerX - halfWidth * 0.3,
-        rimY + depth * 0.66,
-      )
-      .stroke({ color: 0xffffff, alpha: 0.9, width: 5, cap: "round" });
+    const highlight = new Sprite({
+      texture: this.bowlTexture,
+      eventMode: "none",
+      visible: false,
+      alpha: 0,
+    });
+    highlight.anchor.set(0.5, 0);
+    highlight.position.set(centerX, rimY);
+    highlight.width = halfWidth * 2;
+    highlight.height = depth;
 
     const front = new Container({ label: "bowl-front", eventMode: "none" });
-    front.addChild(body, rim, highlight);
+    front.addChild(outline, highlight);
     this.bowlFront = front;
+    this.bowlHighlight = highlight;
     this.addChild(front);
+  }
+
+  private traceInnerRim(graphics: Graphics): Graphics {
+    if (!this.bowl) return graphics;
+    const { centerX, rimY, halfWidth, depth } = this.bowl;
+    const innerLeft = centerX - halfWidth * 0.85;
+    const innerRight = centerX + halfWidth * 0.85;
+    return graphics
+      .moveTo(innerLeft, rimY)
+      .bezierCurveTo(
+        innerLeft,
+        rimY + depth * 0.09,
+        centerX - halfWidth * 0.55,
+        rimY + depth * 0.21,
+        centerX,
+        rimY + depth * 0.217,
+      )
+      .bezierCurveTo(
+        centerX + halfWidth * 0.55,
+        rimY + depth * 0.21,
+        innerRight,
+        rimY + depth * 0.09,
+        innerRight,
+        rimY,
+      );
   }
 
   private drawScanningRing(): void {
     if (!this.bowl) return;
-    const ring = new Graphics()
-      .ellipse(this.bowl.centerX, this.bowl.rimY, this.bowl.halfWidth * 0.62, this.bowl.depth * 0.08)
+    const ring = this.traceInnerRim(new Graphics())
       .stroke({ color: 0xffd55a, alpha: 0.48, width: 2 });
     this.bowlFront?.addChild(ring);
   }
@@ -621,13 +645,20 @@ export class SpaghettiScene extends Container {
 
   private bowlFloorY(x: number): number {
     if (!this.bowl) return Number.POSITIVE_INFINITY;
-    const bowlSettings = this.settings.bowl;
-    const innerHalfWidth = this.bowl.halfWidth * bowlSettings.innerWidthRatio;
-    const horizontal = x - this.bowl.centerX;
-    if (Math.abs(horizontal) > innerHalfWidth) return Number.POSITIVE_INFINITY;
-    const normalizedX = horizontal / innerHalfWidth;
-    return this.bowl.rimY + 4
-      + this.bowl.depth * bowlSettings.floorDepthRatio * (1 - normalizedX * normalizedX);
+    const normalizedX = Math.abs(x - this.bowl.centerX) / this.bowl.halfWidth;
+    if (normalizedX > BOWL_INNER_RIM_RATIO) return Number.POSITIVE_INFINITY;
+    if (normalizedX <= BOWL_INNER_FOOT_RATIO) {
+      return this.bowl.rimY + this.bowl.depth * BOWL_INNER_BASE_DEPTH_RATIO;
+    }
+    for (let index = 0; index < BOWL_INNER_PROFILE.length - 1; index += 1) {
+      const [outerX, outerDepth] = BOWL_INNER_PROFILE[index];
+      const [innerX, innerDepth] = BOWL_INNER_PROFILE[index + 1];
+      if (outerX === innerX || normalizedX > outerX || normalizedX < innerX) continue;
+      const progress = (outerX - normalizedX) / (outerX - innerX);
+      const depthRatio = outerDepth + (innerDepth - outerDepth) * progress;
+      return this.bowl.rimY + this.bowl.depth * depthRatio;
+    }
+    return this.bowl.rimY + this.bowl.depth * BOWL_INNER_BASE_DEPTH_RATIO;
   }
 
 }

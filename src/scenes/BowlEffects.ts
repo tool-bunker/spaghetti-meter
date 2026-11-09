@@ -1,4 +1,4 @@
-import { Container, Graphics, type Ticker } from "pixi.js";
+import { Container, FillGradient, Graphics, type Ticker } from "pixi.js";
 import type { BowlBounds } from "../spaghetti/geometry";
 import { SPAGHETTI_SETTINGS } from "../spaghetti/settings";
 import { COLORS } from "../ui/theme";
@@ -32,6 +32,9 @@ interface Shockwave {
 
 export class BowlEffects extends Container {
   private readonly glow = new Graphics({ eventMode: "none" });
+  private readonly resultAtmosphere = new Graphics({ eventMode: "none" })
+    .circle(0, 0, 1)
+    .fill(createAtmosphereGradient());
   private readonly warmPulse = new Graphics({ eventMode: "none" });
   private readonly rimFlash = new Graphics({ eventMode: "none" });
   private readonly particles: BurstParticle[];
@@ -50,11 +53,14 @@ export class BowlEffects extends Container {
   private wobbleRemaining = 0;
   private currentScoreScale = 1;
   private currentBowlOffsetX = 0;
+  private atmosphereActive = false;
+  private atmospherePhase = 0;
+  private atmosphereBaseAlpha = 0;
 
   constructor() {
     super({ label: "bowl-effects", eventMode: "none" });
     this.particles = Array.from({ length: PARTICLE_COUNT }, (_, index) => {
-      const color = index % 3 === 0 ? COLORS.red : index % 2 === 0 ? COLORS.error : COLORS.accentHover;
+      const color = index % 3 === 0 ? COLORS.primary : index % 2 === 0 ? COLORS.secondary : COLORS.highlight;
       const view = new Graphics({ eventMode: "none" })
         .roundRect(-5, -1.5, 10, 3, 1.5)
         .fill(color);
@@ -82,7 +88,7 @@ export class BowlEffects extends Container {
         endRadius: 0,
       };
     });
-    this.addChild(this.glow, this.warmPulse, this.stampImpact.backdrop);
+    this.addChild(this.resultAtmosphere, this.glow, this.warmPulse, this.stampImpact.backdrop);
     this.foreground.addChild(
       this.stampImpact,
       ...this.shockwaves.map((shockwave) => shockwave.view),
@@ -120,6 +126,14 @@ export class BowlEffects extends Container {
     return this.stampImpact.cameraOffsetY;
   }
 
+  get bowlHighlightProgress(): number {
+    return this.stampImpact.highlightProgress;
+  }
+
+  get bowlHighlightAlpha(): number {
+    return this.stampImpact.highlightAlpha;
+  }
+
   setVisible(visible: boolean): void {
     this.visible = visible;
     this.foreground.visible = visible;
@@ -127,6 +141,14 @@ export class BowlEffects extends Container {
 
   resize(width: number, height: number, bowl: BowlBounds): void {
     this.bowl = bowl;
+    this.resultAtmosphere.position.set(
+      bowl.centerX,
+      bowl.rimY + bowl.depth * 0.45,
+    );
+    this.resultAtmosphere.scale.set(
+      Math.max(width * 0.62, bowl.halfWidth * 2.25),
+      Math.max(height * 0.48, bowl.depth * 1.75),
+    );
     this.stampImpact.resize(width, height);
     this.glow.clear()
       .ellipse(
@@ -138,16 +160,19 @@ export class BowlEffects extends Container {
       .fill(0xffffff);
     this.warmPulse.clear()
       .ellipse(bowl.centerX, bowl.rimY + bowl.depth * 0.3, bowl.halfWidth + 74, bowl.depth + 72)
-      .fill(COLORS.red);
+      .fill(COLORS.highlight);
     this.rimFlash.clear()
       .ellipse(bowl.centerX, bowl.rimY, bowl.halfWidth, bowl.depth * 0.13)
-      .stroke({ color: COLORS.accentHover, width: 7 });
+      .stroke({ color: COLORS.secondary, width: 7 });
     this.updateGlow();
   }
 
   setReducedMotion(reducedMotion: boolean): void {
     if (this.reducedMotion === reducedMotion) return;
     this.reducedMotion = reducedMotion;
+    if (reducedMotion && this.atmosphereActive) {
+      this.resultAtmosphere.alpha = this.atmosphereBaseAlpha;
+    }
     this.stampImpact.setReducedMotion(reducedMotion);
     if (reducedMotion) this.clearTransientEffects();
   }
@@ -156,6 +181,8 @@ export class BowlEffects extends Container {
     this.active = false;
     this.score = 0;
     this.productionProgress = 0;
+    this.atmosphereActive = false;
+    this.resultAtmosphere.visible = false;
     this.clearTransientEffects();
     this.updateGlow();
   }
@@ -164,6 +191,8 @@ export class BowlEffects extends Container {
     this.active = true;
     this.score = 0;
     this.productionProgress = 0;
+    this.atmosphereActive = false;
+    this.resultAtmosphere.visible = false;
     this.clearTransientEffects();
     this.updateGlow();
   }
@@ -221,7 +250,7 @@ export class BowlEffects extends Container {
     }
   }
 
-  triggerShockwave(x: number, y: number, radius: number, color: number = COLORS.accentHover): void {
+  triggerShockwave(x: number, y: number, radius: number, color: number = COLORS.secondary): void {
     if (this.reducedMotion || radius <= 0) return;
     let selected: Shockwave | undefined;
     for (const shockwave of this.shockwaves) {
@@ -247,10 +276,28 @@ export class BowlEffects extends Container {
   }
 
   triggerStampImpact(x: number, y: number, radius: number, score: number): void {
-    this.stampImpact.trigger(x, y, radius, score, scoreColor(score));
+    if (!this.bowl) return;
+    this.stampImpact.trigger(
+      x,
+      y,
+      radius,
+      score,
+      scoreColor(score),
+      this.bowl.rimY,
+      this.bowl.rimY + this.bowl.depth,
+    );
+    this.showResultAtmosphere(score);
+  }
+
+  triggerAftershock(x: number, y: number, radius: number, score: number): void {
+    if (this.reducedMotion) return;
+    this.wobbleRemaining = Math.max(this.wobbleRemaining, 0.28);
+    this.triggerShockwave(x, y, radius, scoreColor(score));
+    this.stampImpact.triggerAftershock();
   }
 
   showStaticImpact(x: number, y: number, radius: number, score: number): void {
+    this.showResultAtmosphere(score);
     this.stampImpact.showStatic(x, y, radius, scoreColor(score));
   }
 
@@ -259,8 +306,9 @@ export class BowlEffects extends Container {
   }
 
   update(ticker: Ticker): void {
-    if (this.reducedMotion) return;
     const deltaSeconds = Math.min(ticker.deltaMS / 1_000, 0.05);
+    this.updateAtmosphere(deltaSeconds);
+    if (this.reducedMotion) return;
     this.updatePulse(deltaSeconds);
     this.updateRimFlash(deltaSeconds);
     this.updateWarmPulse(deltaSeconds);
@@ -270,10 +318,31 @@ export class BowlEffects extends Container {
     this.stampImpact.update(deltaSeconds);
   }
 
+  private showResultAtmosphere(score: number): void {
+    this.atmosphereActive = true;
+    this.atmospherePhase = 0;
+    this.atmosphereBaseAlpha = score <= 100 ? 0.11 : score <= 150 ? 0.13 : 0.15;
+    this.resultAtmosphere.tint = score <= 100
+      ? COLORS.scoreGreen
+      : score <= 150
+        ? COLORS.scoreOrange
+        : COLORS.red;
+    this.resultAtmosphere.alpha = this.atmosphereBaseAlpha;
+    this.resultAtmosphere.visible = true;
+  }
+
+  private updateAtmosphere(deltaSeconds: number): void {
+    if (!this.atmosphereActive || this.reducedMotion) return;
+    this.atmospherePhase += deltaSeconds * 0.7;
+    if (this.atmospherePhase >= Math.PI * 2) this.atmospherePhase -= Math.PI * 2;
+    this.resultAtmosphere.alpha = this.atmosphereBaseAlpha
+      * (0.9 + Math.sin(this.atmospherePhase) * 0.1);
+  }
+
   private updateGlow(): void {
     const scoreRatio = Math.min(1, this.score / SCORE_RED_AT);
-    this.glow.tint = this.active ? scoreColor(this.score) : COLORS.accent;
-    this.glow.alpha = this.active ? 0.025 + scoreRatio * 0.045 : 0.025;
+    this.glow.tint = this.active ? COLORS.accent : COLORS.secondary;
+    this.glow.alpha = this.active ? 0.025 + scoreRatio * 0.025 : 0.025;
   }
 
   private triggerPulse(amplitude: number): void {
@@ -396,14 +465,29 @@ export class BowlEffects extends Container {
   }
 }
 
+function createAtmosphereGradient(): FillGradient {
+  return new FillGradient({
+    type: "radial",
+    center: { x: 0.5, y: 0.5 },
+    innerRadius: 0,
+    outerCenter: { x: 0.5, y: 0.5 },
+    outerRadius: 0.5,
+    colorStops: [
+      { offset: 0, color: "rgba(255,255,255,0.72)" },
+      { offset: 0.46, color: "rgba(255,255,255,0.2)" },
+      { offset: 1, color: "rgba(255,255,255,0)" },
+    ],
+  });
+}
+
 export function scoreColor(score: number): number {
   const baseline = SPAGHETTI_SETTINGS.serving.containedScore;
   if (score <= baseline) {
-    return mixColor(COLORS.scoreGreen, COLORS.accent, score / baseline);
+    return mixColor(COLORS.scoreGreen, COLORS.highlight, score / baseline);
   }
   return mixColor(
-    COLORS.accent,
-    COLORS.red,
+    COLORS.highlight,
+    COLORS.primary,
     Math.min(1, (score - baseline) / (SCORE_RED_AT - baseline)),
   );
 }

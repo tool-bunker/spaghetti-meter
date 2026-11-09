@@ -23,9 +23,9 @@ Their exact Source Code Form can be downloaded at no charge from the URLs below:
 
 COMPONENT INVENTORY
 -------------------
-- bundled:code-buster@0.12.0
+- bundled:code-buster@0.14.1
   License: MIT
-  Source: https://github.com/tool-bunker/code-buster/releases/tag/v0.12.0
+  Source: https://github.com/tool-bunker/code-buster/releases/tag/v0.14.1
   Authors: Jonas Robertsson
 - cargo:adler2@2.0.1
   License: 0BSD OR MIT OR Apache-2.0
@@ -1778,6 +1778,9 @@ COMPONENT INVENTORY
 - npm:@tauri-apps/plugin-dialog@2.8.3
   License: MIT OR Apache-2.0
   Source: https://registry.npmjs.org/@tauri-apps/plugin-dialog/-/plugin-dialog-2.8.3.tgz
+- npm:@tauri-apps/plugin-fs@2.7.1
+  License: MIT OR Apache-2.0
+  Source: https://registry.npmjs.org/@tauri-apps/plugin-fs/-/plugin-fs-2.7.1.tgz
 - npm:@tauri-apps/plugin-opener@2.5.5
   License: MIT OR Apache-2.0
   Source: https://registry.npmjs.org/@tauri-apps/plugin-opener/-/plugin-opener-2.5.5.tgz
@@ -1799,6 +1802,10 @@ COMPONENT INVENTORY
   License: MIT
   Source: https://registry.npmjs.org/eventemitter3/-/eventemitter3-5.0.4.tgz
   Authors: Arnout Kazemier
+- npm:gifenc@1.0.3
+  License: MIT
+  Source: https://registry.npmjs.org/gifenc/-/gifenc-1.0.3.tgz
+  Authors: Matt DesLauriers
 - npm:gifuct-js@2.1.2
   License: MIT
   Source: https://registry.npmjs.org/gifuct-js/-/gifuct-js-2.1.2.tgz
@@ -1877,7 +1884,7 @@ LICENSE AND NOTICE TEXTS
 ------------------------
 
 Notice 1
-Used by: bundled:code-buster@0.12.0
+Used by: bundled:code-buster@0.14.1
 
 MIT License
 
@@ -13320,7 +13327,7 @@ SOFTWARE.
 --------------------------------------------------------------------------------
 
 Notice 174
-Used by: cargo:tauri-plugin-dialog@2.8.3 (LICENSE.spdx), cargo:tauri-plugin-fs@2.7.1 (LICENSE.spdx), cargo:tauri-plugin-opener@2.5.5 (LICENSE.spdx), cargo:tauri-plugin-shell@2.3.6 (LICENSE.spdx), npm:@tauri-apps/plugin-dialog@2.8.3 (LICENSE.spdx), npm:@tauri-apps/plugin-opener@2.5.5 (LICENSE.spdx)
+Used by: cargo:tauri-plugin-dialog@2.8.3 (LICENSE.spdx), cargo:tauri-plugin-fs@2.7.1 (LICENSE.spdx), cargo:tauri-plugin-opener@2.5.5 (LICENSE.spdx), cargo:tauri-plugin-shell@2.3.6 (LICENSE.spdx), npm:@tauri-apps/plugin-dialog@2.8.3 (LICENSE.spdx), npm:@tauri-apps/plugin-fs@2.7.1 (LICENSE.spdx), npm:@tauri-apps/plugin-opener@2.5.5 (LICENSE.spdx)
 
 SPDXVersion: SPDX-2.1
 DataLicense: CC0-1.0
@@ -15210,6 +15217,32 @@ SOFTWARE.
 --------------------------------------------------------------------------------
 
 Notice 215
+Used by: npm:gifenc@1.0.3 (LICENSE.md)
+
+The MIT License (MIT)
+Copyright (c) 2017 Matt DesLauriers
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+OR OTHER DEALINGS IN THE SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+Notice 216
 Used by: npm:gifuct-js@2.1.2 (LICENSE), npm:js-binary-schema-parser@2.0.3 (LICENSE)
 
 The MIT License (MIT)
@@ -15236,7 +15269,7 @@ SOFTWARE.
 
 --------------------------------------------------------------------------------
 
-Notice 216
+Notice 217
 Used by: npm:ismobilejs@1.1.1 (LICENSE)
 
 MIT License
@@ -15263,7 +15296,7 @@ SOFTWARE.
 
 --------------------------------------------------------------------------------
 
-Notice 217
+Notice 218
 Used by: npm:parse-svg-path@0.2.0 (LICENSE)
 
 The MIT License
@@ -15291,7 +15324,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 --------------------------------------------------------------------------------
 
-Notice 218
+Notice 219
 Used by: npm:pixi.js@8.22.0 (LICENSE)
 
 The MIT License
@@ -15318,7 +15351,7 @@ THE SOFTWARE.
 
 --------------------------------------------------------------------------------
 
-Notice 219
+Notice 220
 Used by: npm:tiny-lru@11.4.7 (LICENSE)
 
 Copyright (c) 2026, Jason Mulligan
@@ -15351,7 +15384,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 --------------------------------------------------------------------------------
 
-Notice 220
+Notice 221
 Used by: npm:tweedle.js@2.1.0 (LICENSE.md)
 
 The MIT License

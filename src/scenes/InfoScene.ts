@@ -1,7 +1,7 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Container, Graphics, Text, type TextStyleOptions } from "pixi.js";
 import { UiButton } from "../ui/UiButton";
-import { COLORS, FONTS } from "../ui/theme";
+import { BACKGROUND_GLOWS, COLORS, FONTS } from "../ui/theme";
 
 const BOLD_FONT_WEIGHT = "bold";
 const COMPACT_LAYOUT_MAX_WIDTH = 700;
@@ -11,30 +11,31 @@ const CODE_BUSTER_REPOSITORY_URL = "https://github.com/tool-bunker/code-buster";
 export class InfoScene extends Container {
   private readonly background = new Graphics();
   private readonly glow = new Graphics();
-  private readonly eyebrow = centeredText("ABOUT SPAGHETTI METER", {
-    fill: COLORS.red,
+  private readonly eyebrow = centeredText("OFFICIAL PASTA SCIENCE", {
+    fill: COLORS.secondary,
     fontFamily: FONTS.mono,
     fontSize: 10,
     fontWeight: BOLD_FONT_WEIGHT,
     letterSpacing: 2,
   });
-  private readonly title = centeredText("A playful second opinion", {
+  private readonly title = centeredText("Higher score. Better engineer. Probably.", {
     fill: COLORS.heading,
     fontFamily: FONTS.display,
     fontSize: 56,
-    fontWeight: "500",
-    letterSpacing: -2,
+    fontWeight: "700",
+    letterSpacing: -1.6,
     align: "center",
   });
   private readonly body = new Text({
     text:
-      "Spaghetti Meter turns Code Buster findings into a deliberately lighthearted score. "
-      + "It is a conversation starter, not a final verdict on your repository.\n\n"
-      + "Take the result with a grain of salt. Every repository has its own context, so if a score feels wrong, trust your judgment. "
-      + "Sharing true positives and false positives is a useful way to help Code Buster improve.\n\n"
-      + "The recipe is 100 × (actionable × 3 + advisory) / max(files, 10). "
-      + "Each actionable finding counts three times, each advisory counts once, and the minimum denominator keeps tiny repositories from exploding. "
-      + "A score of 100 means one weighted finding per analyzed file. Scores through 100 fit in the bowl; anything above 100 overflows.",
+      "Finally, a code metric worth chasing. Spaghetti Meter turns Code Buster findings into the only number "
+      + "your engineering career was missing: noodle prestige.\n\n"
+      + "Higher is better. Probably. More weighted findings mean more spaghetti in the bowl and, according to extremely serious pasta science, "
+      + "greater professional glory. Challenge your coworkers, impress your boss, or simply watch the bowl lose containment.\n\n"
+      + "The recipe sets W = actionable × 3 + advisory. Density is 100 × W / max(analyzed files, 10); volume is 75 × log10(1 + W / 10). "
+      + "The higher number wins, so compact tangles and large cleanup piles both count. Files Code Buster skips are excluded.\n\n"
+      + "This is satire, not a software quality ranking. Every repository has context, so take the result with a grain of salt. "
+      + "If Code Buster labels something incorrectly, help improve it by sharing true positives and false positives.",
     style: {
       fill: COLORS.body,
       fontFamily: FONTS.sans,
@@ -97,8 +98,12 @@ export class InfoScene extends Container {
 
     this.background.clear().rect(0, 0, width, height).fill(COLORS.background);
     this.glow.clear()
-      .circle(centerX, height * 0.15, Math.min(width * 0.34, 280))
-      .fill({ color: COLORS.accent, alpha: 0.035 });
+      .ellipse(width * 0.9, height * 0.12, Math.min(width * 0.42, 380), Math.min(height * 0.42, 300))
+      .fill(BACKGROUND_GLOWS.primary)
+      .ellipse(width * 0.08, height * 0.3, Math.min(width * 0.34, 300), Math.min(height * 0.36, 250))
+      .fill(BACKGROUND_GLOWS.secondary)
+      .ellipse(centerX, height * 0.96, Math.min(width * 0.4, 360), Math.min(height * 0.3, 220))
+      .fill(BACKGROUND_GLOWS.accent);
     this.eyebrow.position.set(centerX, top);
 
     this.title.style.fontSize = compact
@@ -106,12 +111,13 @@ export class InfoScene extends Container {
       : Math.min(62, Math.max(44, width * 0.048));
     this.title.style.wordWrap = true;
     this.title.style.wordWrapWidth = contentWidth;
-    this.title.position.set(centerX, top + (compact ? 42 : 55));
+    const titleTop = top + (compact ? 28 : 36);
+    this.title.position.set(centerX, titleTop + this.title.height / 2);
 
     this.body.style.fontSize = compact ? 12 : 13;
     this.body.style.lineHeight = compact ? 19 : 22;
     this.body.style.wordWrapWidth = Math.min(contentWidth, 620);
-    const bodyTop = top + (compact ? 92 : 116);
+    const bodyTop = titleTop + this.title.height + (compact ? 18 : 28);
     this.body.position.set(centerX, bodyTop);
 
     const githubY = bodyTop + this.body.height + 12;
