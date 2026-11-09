@@ -157,6 +157,9 @@ fn sorted_counts(counts: BTreeMap<String, u64>, limit: usize) -> Vec<CountedLabe
         .collect()
 }
 
+const VOLUME_SCORE_SCALE: f64 = 75.0;
+const VOLUME_FINDING_BASELINE: f64 = 10.0;
+
 fn spaghetti_metrics(file_count: u64, actionable: u64, advisory: u64) -> (u32, f64) {
     if file_count == 0 {
         return (0, 0.0);
@@ -165,7 +168,11 @@ fn spaghetti_metrics(file_count: u64, actionable: u64, advisory: u64) -> (u32, f
     let weighted_findings = actionable.saturating_mul(3).saturating_add(advisory) as f64;
     let findings_per_file = weighted_findings / file_count as f64;
     let effective_file_count = file_count.max(10) as f64;
-    let score = (weighted_findings / effective_file_count * 100.0)
+    let density_score = weighted_findings / effective_file_count * 100.0;
+    let volume_score =
+        VOLUME_SCORE_SCALE * (1.0 + weighted_findings / VOLUME_FINDING_BASELINE).log10();
+    let score = density_score
+        .max(volume_score)
         .round()
         .clamp(0.0, f64::from(u32::MAX)) as u32;
 
@@ -254,6 +261,22 @@ mod tests {
 
         assert_eq!(score, 100);
         assert_eq!(density, 1.0);
+    }
+
+    #[test]
+    fn absolute_finding_volume_raises_large_repository_scores() {
+        let (score, density) = spaghetti_metrics(1_000, 0, 200);
+
+        assert_eq!(score, 99);
+        assert!((density - 0.2).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn logarithmic_volume_keeps_sparse_large_repositories_low() {
+        let (score, density) = spaghetti_metrics(1_000, 0, 10);
+
+        assert_eq!(score, 23);
+        assert!((density - 0.01).abs() < f64::EPSILON);
     }
 
     #[test]
