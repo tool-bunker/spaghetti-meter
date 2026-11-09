@@ -23,7 +23,7 @@ const binariesDirectory = join(root, "src-tauri", "binaries");
 const destination = join(binariesDirectory, `cb-${target}${release.extension}`);
 
 mkdirSync(binariesDirectory, { recursive: true });
-if (hasExpectedVersion(destination, version)) {
+if (existsSync(destination) && !sidecarVersionError(destination, version)) {
   console.log(`Code Buster ${version} sidecar is ready for ${target}`);
   process.exit(0);
 }
@@ -48,9 +48,8 @@ try {
   }
   copyFileSync(extracted, destination);
   if (process.platform !== "win32") chmodSync(destination, 0o755);
-  if (!hasExpectedVersion(destination, version)) {
-    throw new Error(`Downloaded sidecar does not report Code Buster ${version}`);
-  }
+  const versionError = sidecarVersionError(destination, version);
+  if (versionError) throw versionError;
   console.log(`Prepared Code Buster ${version} sidecar for ${target}`);
 } finally {
   rmSync(temporaryDirectory, { recursive: true, force: true });
@@ -84,10 +83,22 @@ function releaseFor(targetTriple) {
   return release;
 }
 
-function hasExpectedVersion(executable, expectedVersion) {
-  if (!existsSync(executable)) return false;
+function sidecarVersionError(executable, expectedVersion) {
   const result = spawnSync(executable, ["version"], { encoding: "utf8" });
-  return result.status === 0 && result.stdout.split(/\r?\n/, 1)[0] === `cb ${expectedVersion}`;
+  const expected = `cb ${expectedVersion}`;
+  if (result.status === 0 && result.stdout?.split(/\r?\n/, 1)[0] === expected) return null;
+
+  const status = result.error?.code
+    || (result.signal ? `signal ${result.signal}` : `exit code ${result.status}`);
+  const diagnostics = [
+    result.error?.message,
+    result.stderr?.trim(),
+    result.stdout?.trim(),
+  ].filter(Boolean).join("\n");
+  return new Error(
+    `Code Buster sidecar version check failed for ${target}; expected "${expected}" (${status}).`
+    + (diagnostics ? `\n${diagnostics}` : ""),
+  );
 }
 
 async function download(url) {

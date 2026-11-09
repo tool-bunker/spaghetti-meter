@@ -14,6 +14,7 @@ Thanks for helping improve the official pasta science.
 - Node.js 20 or newer
 - Rust and Cargo
 - The [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/) for your platform
+- On Linux: x86-64 and glibc 2.39 or newer (Ubuntu 24.04 LTS or newer)
 
 ## Set up the project
 

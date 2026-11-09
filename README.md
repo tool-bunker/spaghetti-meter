@@ -15,7 +15,7 @@
 ## Become unreasonably successful
 
 1. Select a repository.
-2. Spaghetti Meter analyzes it with the bundled [Code Buster](https://github.com/tool-bunker/code-buster) 0.14.1 executable.
+2. Spaghetti Meter analyzes it with the bundled [Code Buster](https://github.com/tool-bunker/code-buster) 0.14.2 executable.
 3. Watch the prestige score smash into a physics-driven serving of spaghetti.
 4. Export the evidence as a PNG image, animated GIF, or silent video.
 
@@ -45,6 +45,8 @@ Files skipped by Code Buster are excluded. Scores are not capped. There is alway
 ## Run the app
 
 Requirements: Node.js 20+, Rust, and the [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/).
+
+Linux requires x86-64 and glibc 2.39 or newer, such as Ubuntu 24.04 LTS.
 
 ```sh
 npm install

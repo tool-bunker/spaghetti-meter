@@ -23,9 +23,9 @@ Their exact Source Code Form can be downloaded at no charge from the URLs below:
 
 COMPONENT INVENTORY
 -------------------
-- bundled:code-buster@0.14.1
+- bundled:code-buster@0.14.2
   License: MIT
-  Source: https://github.com/tool-bunker/code-buster/releases/tag/v0.14.1
+  Source: https://github.com/tool-bunker/code-buster/releases/tag/v0.14.2
   Authors: Jonas Robertsson
 - cargo:adler2@2.0.1
   License: 0BSD OR MIT OR Apache-2.0
@@ -1884,7 +1884,7 @@ LICENSE AND NOTICE TEXTS
 ------------------------
 
 Notice 1
-Used by: bundled:code-buster@0.14.1
+Used by: bundled:code-buster@0.14.2
 
 MIT License
 

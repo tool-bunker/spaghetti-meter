@@ -17,7 +17,7 @@
     "tauri": "tauri"
   },
   "config": {
-    "codeBusterVersion": "0.14.1"
+    "codeBusterVersion": "0.14.2"
   },
   "license": "MIT",
   "dependencies": {

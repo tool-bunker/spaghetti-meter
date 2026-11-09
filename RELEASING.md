@@ -15,10 +15,14 @@ Unsigned applications can trigger operating-system warnings. This is expected an
 | Platform | Architecture | Expected bundles |
 | --- | --- | --- |
 | macOS | ARM64 | DMG and application bundle |
-| Linux | x86_64 | AppImage, Debian package, and RPM package |
+| Linux (glibc 2.39+) | x86_64 | AppImage, Debian package, and RPM package |
 | Windows | x86_64 | NSIS installer and MSI package |
 
 The Code Buster sidecar currently supports exactly these targets. Adding another application target requires a matching entry and published Code Buster archive in `scripts/prepare-sidecar.mjs`.
+
+Linux CI and release jobs use Ubuntu 24.04. The published Code Buster Linux
+sidecar requires glibc 2.39, so Ubuntu 22.04 cannot execute it; upgrading only
+the sidecar version does not remove this runtime requirement.
 
 ## One-time GitHub setup
 
