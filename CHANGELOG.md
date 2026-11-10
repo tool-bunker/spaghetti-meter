@@ -30,7 +30,7 @@ All notable changes to Spaghetti Meter are documented here. The format follows [
 
 - Run Linux verification and release builds on Ubuntu 24.04 to match the glibc 2.39 minimum required by the bundled Code Buster executable.
 - Preserve the sidecar's execution error, exit status or signal, and output when its version check fails instead of reporting every failure as a version mismatch.
-- Accept Windows CRLF line endings when validating the Cargo package version.
+- Accept Windows CRLF line endings when validating Cargo package versions and bundled third-party notices.
 
 ## [0.1.0]
 

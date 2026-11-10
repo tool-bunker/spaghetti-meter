@@ -99,7 +99,7 @@ for (const [index, group] of groups.entries()) {
 
 const output = `${lines.join("\n").trimEnd()}\n`;
 if (process.argv.includes("--check")) {
-  const existing = existsSync(outputPath) ? readFileSync(outputPath, "utf8") : "";
+  const existing = existsSync(outputPath) ? readFileSync(outputPath, "utf8").replaceAll("\r\n", "\n") : "";
   if (existing !== output) {
     console.error(`${relative(root, outputPath)} is stale; run npm run licenses:generate`);
     process.exitCode = 1;
