@@ -56,7 +56,7 @@ jobs:
               --title "Spaghetti Meter $RELEASE_TAG" \
               --notes-file "$RUNNER_TEMP/release-notes.md"
           fi
-          release_id=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.id')
+          release_id=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --jq ".[] | select(.tag_name == \"$RELEASE_TAG\") | .id")
           echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
 
   build:
