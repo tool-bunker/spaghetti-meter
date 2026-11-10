@@ -24,6 +24,10 @@ Linux CI and release jobs use Ubuntu 24.04. The published Code Buster Linux
 sidecar requires glibc 2.39, so Ubuntu 22.04 cannot execute it; upgrading only
 the sidecar version does not remove this runtime requirement.
 
+Density-aware scoring requires JSON report schema 3, `sourceMetrics.schemaVersion = 1`, and explicit `report`/`count` finding modes from a verbose review. Code Buster 0.14.3 supplies this contract. Pin a compatible published engine in `package.json` and verify its archives before distributing the application.
+
+`SPAGHETTI_METER_CB_SOURCE` is an explicit local-development override, not a release source. Unset it before the release gate. Preparation rejects incompatible archives and does not treat a marked local build as a cached published sidecar. License generation must also run without the override so notices match the published engine and its runtime dependencies.
+
 ## One-time GitHub setup
 
 1. Push this repository to GitHub and use `main` as the default branch.
@@ -39,7 +43,7 @@ the sidecar version does not remove this runtime requirement.
    - the root package entry in `package-lock.json`
    - `src-tauri/Cargo.toml`
    - `src-tauri/tauri.conf.json`
-3. If upgrading Code Buster, update `config.codeBusterVersion` in `package.json` and confirm matching release archives exist for all three targets.
+3. Pin a compatible published Code Buster version in `config.codeBusterVersion` in `package.json`, confirm matching archives exist for all three targets, unset `SPAGHETTI_METER_CB_SOURCE`, and run `npm run prepare:sidecar` to verify the release's version and report contract.
 4. Move completed entries from **Unreleased** in `CHANGELOG.md` into a dated version section.
 5. Refresh and review legal notices:
 

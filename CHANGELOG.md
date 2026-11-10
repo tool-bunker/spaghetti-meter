@@ -9,6 +9,7 @@ All notable changes to Spaghetti Meter are documented here. The format follows [
 - Final-impact hit-stop, screen flash, score echoes, meter threshold pulses, meter recoil, result evidence counts, and persistent score-category atmosphere.
 - Persistent centered Spaghetti Meter branding and a clean result export menu for PNG images, animated GIF replays, and silent WebM or MP4 video replays.
 - Contributor setup, verification, pull-request, visual-testing, and Code Buster sidecar guidance in `CONTRIBUTING.md`.
+- Explicit host-native Code Buster source builds through `SPAGHETTI_METER_CB_SOURCE`, with separate local cache markers, report-contract validation, and complete bundled-engine runtime dependency notices.
 
 ### Changed
 
@@ -16,10 +17,12 @@ All notable changes to Spaghetti Meter are documented here. The format follows [
 - Doubled the base spaghetti serving and per-point strand growth through score 100 while retaining slower growth for overflow scores.
 - Reduced the rendered and physical bowl scale from 92% to 84% without changing spaghetti spawn depth, and reduced each rope from 12 to 10 physics particles.
 - Synchronized the bottom meter's final value with the score-badge impact, faded the temporary counter before it could reveal the result, corrected the scan-cancel link alignment, and made top-control hints dismiss reliably.
-- Increased animated GIF exports from 10 to 20 fps and upgraded the bundled, checksum-verified Code Buster sidecar from 0.13.0 to 0.14.2.
+- Increased animated GIF exports from 10 to 20 fps and upgraded the bundled, checksum-verified Code Buster sidecar from 0.13.0 to 0.14.3.
 - Changed the score badge to scale from oversized to its final size around one fixed center point, without positional travel or camera-punch drift.
 - Replaced the primary folder button's purple/cyan hover with a restrained red state and stabilized GIF capture by rendering immediately before copying the transient WebGL backbuffer.
 - Aligned the README's wording with the playful competitive-pasta voice used on Toolbunker's Spaghetti Meter page while retaining the scoring and setup details.
+- Replace file-count and absolute-volume scoring with code-line-normalized, per-file/rule/mode density scoring and diminishing repeated-finding contributions. Preserve the 3:1 actionable/advisory weights, all finding categories, raw evidence counts, and the bowl's 100-point reference.
+- Require canonical analyzed-code metrics and effective finding modes from verbose Code Buster reports instead of inferring modes from severity or falling back to the previous score.
 
 ### Fixed
 

@@ -76,6 +76,7 @@ async fn run_code_buster(
         .args([
             "review",
             "--advisory",
+            "--verbose",
             "--no-cache",
             "--format=json",
             "--root",

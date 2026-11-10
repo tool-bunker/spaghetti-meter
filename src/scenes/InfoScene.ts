@@ -32,8 +32,9 @@ export class InfoScene extends Container {
       + "your engineering career was missing: noodle prestige.\n\n"
       + "Higher is better. Probably. More weighted findings mean more spaghetti in the bowl and, according to extremely serious pasta science, "
       + "greater professional glory. Challenge your coworkers, impress your boss, or simply watch the bowl lose containment.\n\n"
-      + "The recipe sets W = actionable × 3 + advisory. Density is 100 × W / max(analyzed files, 10); volume is 75 × log10(1 + W / 10). "
-      + "The higher number wins, so compact tangles and large cleanup piles both count. Files Code Buster skips are excluded.\n\n"
+      + "The recipe groups findings by file, rule and mode. Each group adds 100 × weight × local / max(code lines, 1000) × log2(1 + 100 × count / local). "
+      + "Weight is 3 for actionable findings and 1 for advisory; local is that file’s code lines (at least 1), or the project total for non-source findings. "
+      + "Repeated findings taper off; skipped files and comment-only lines do not count. String-literal content remains code. No findings means zero; otherwise the rounded score is at least 1.\n\n"
       + "This is satire, not a software quality ranking. Every repository has context, so take the result with a grain of salt. "
       + "If Code Buster labels something incorrectly, help improve it by sharing true positives and false positives.",
     style: {

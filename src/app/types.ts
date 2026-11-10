@@ -10,11 +10,11 @@ export interface ScanReport {
   projectVersion: string | null;
   path: string;
   fileCount: number;
+  codeLines: number;
   actionableCount: number;
   advisoryCount: number;
   totalFindings: number;
   score: number;
-  findingsPerFile: number;
   durationMs: number;
   groups: CountedLabel[];
   topRules: CountedLabel[];

@@ -3,11 +3,14 @@ import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   readdirSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,8 +24,8 @@ const licenseTexts = new Map();
 const missingLicenseTexts = [];
 
 collectNpmComponents();
-collectCargoComponents();
-collectCodeBuster();
+collectCargoComponents(cargoMetadata("src-tauri/Cargo.toml"), "cargo");
+await collectCodeBuster();
 const unknownLicenses = components.filter((component) => component.license === "UNKNOWN");
 if (unknownLicenses.length > 0) {
   throw new Error(`Missing license metadata for: ${unknownLicenses.map(({ id }) => id).join(", ")}`);
@@ -131,12 +134,15 @@ function collectNpmComponents() {
   }
 }
 
-function collectCargoComponents() {
-  const metadata = JSON.parse(execFileSync(
+function cargoMetadata(manifestPath) {
+  return JSON.parse(execFileSync(
     "cargo",
-    ["metadata", "--manifest-path", "src-tauri/Cargo.toml", "--format-version", "1", "--locked"],
+    ["metadata", "--manifest-path", manifestPath, "--format-version", "1", "--locked"],
     { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
   ));
+}
+
+function collectCargoComponents(metadata, namespace) {
   const nodes = new Map(metadata.resolve.nodes.map((node) => [node.id, node]));
   const reachable = new Set([metadata.resolve.root]);
   const queue = [metadata.resolve.root];
@@ -156,7 +162,7 @@ function collectCargoComponents() {
 
     const cratePage = `https://crates.io/crates/${cargoPackage.name}/${cargoPackage.version}`;
     const component = {
-      id: `cargo:${cargoPackage.name}@${cargoPackage.version}`,
+      id: `${namespace}:${cargoPackage.name}@${cargoPackage.version}`,
       license: cargoPackage.license ?? "UNKNOWN",
       source: cargoPackage.repository ? `${cratePage} (${cargoPackage.repository})` : cratePage,
       authors: cargoPackage.authors.join(", "),
@@ -167,17 +173,44 @@ function collectCargoComponents() {
   }
 }
 
-function collectCodeBuster() {
+async function collectCodeBuster() {
   const version = packageJson.config.codeBusterVersion;
-  const component = {
-    id: `bundled:code-buster@${version}`,
-    license: "MIT",
-    source: `https://github.com/tool-bunker/code-buster/releases/tag/v${version}`,
-    authors: "Jonas Robertsson",
-    sourceArchive: `https://github.com/tool-bunker/code-buster/archive/refs/tags/v${version}.tar.gz`,
-  };
-  components.push(component);
-  addLicenseText(component.id, readFileSync(join(root, "src-tauri", "resources", "code-buster-LICENSE.txt"), "utf8"));
+  const localSource = process.env.SPAGHETTI_METER_CB_SOURCE?.trim();
+  const sourceArchive = `https://github.com/tool-bunker/code-buster/archive/refs/tags/v${version}.tar.gz`;
+  let temporaryDirectory;
+  try {
+    let sourceDirectory;
+    if (localSource) {
+      sourceDirectory = resolve(root, localSource);
+    } else {
+      temporaryDirectory = mkdtempSync(join(tmpdir(), "spaghetti-meter-engine-notices-"));
+      const response = await fetch(sourceArchive);
+      if (!response.ok) throw new Error(`Could not download Code Buster source notices: HTTP ${response.status}`);
+      const archive = join(temporaryDirectory, "source.tar.gz");
+      writeFileSync(archive, Buffer.from(await response.arrayBuffer()));
+      execFileSync("tar", ["-xf", archive, "-C", temporaryDirectory]);
+      sourceDirectory = join(temporaryDirectory, `code-buster-${version}`);
+    }
+    const metadata = cargoMetadata(join(sourceDirectory, "Cargo.toml"));
+    const engine = metadata.packages.find((entry) => entry.id === metadata.resolve.root);
+    if (engine?.name !== "code-buster" || engine.version !== version) {
+      throw new Error(`Code Buster notices must match config.codeBusterVersion (${version})`);
+    }
+    const component = {
+      id: `bundled:code-buster@${version}`,
+      license: engine.license ?? "UNKNOWN",
+      source: localSource
+        ? "Local Code Buster source build (unreleased)"
+        : `https://github.com/tool-bunker/code-buster/releases/tag/v${version}`,
+      authors: engine.authors.join(", "),
+      sourceArchive: localSource ? null : sourceArchive,
+    };
+    components.push(component);
+    addLicenseFiles(component, sourceDirectory, engine.license_file);
+    collectCargoComponents(metadata, "bundled:code-buster/cargo");
+  } finally {
+    if (temporaryDirectory) rmSync(temporaryDirectory, { recursive: true, force: true });
+  }
 }
 
 function addLicenseFiles(component, packageDirectory, declaredLicenseFile) {

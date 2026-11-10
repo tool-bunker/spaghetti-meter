@@ -19,11 +19,11 @@ Thanks for helping improve the official pasta science.
 ## Set up the project
 
 ```sh
-npm install
+npm ci
 npm run tauri dev
 ```
 
-`npm install` downloads the platform-specific Code Buster sidecar and verifies its published SHA-256 checksum.
+`npm ci` downloads the pinned Code Buster sidecar, verifies its published SHA-256 checksum, and validates the version and report metadata required by scoring. A sibling source checkout is optional; see **Code Buster changes** below.
 
 ## Make a change
 
@@ -68,7 +68,9 @@ Keep commits reviewable and do not commit generated build directories, exported 
 
 ## Code Buster changes
 
-Spaghetti Meter bundles a pinned Code Buster release. Do not replace the sidecar binary manually. Update the configured version and checksums through the existing sidecar preparation workflow, then verify the reported Code Buster version and scan compatibility.
+Spaghetti Meter normally bundles a pinned, checksum-verified Code Buster release. For local engine development, use `SPAGHETTI_METER_CB_SOURCE` rather than copying a binary by hand; only host-target builds are supported. License generation uses the same checkout and includes its runtime dependencies.
+
+Before distribution, publish a compatible Code Buster release, update the configured version, unset `SPAGHETTI_METER_CB_SOURCE`, and prepare the published sidecar. Preparation checks verbose JSON source metrics and finding modes as well as `--version`; matching a version string alone is not sufficient. Follow [RELEASING.md](RELEASING.md).
 
 Changes to Code Buster rules or finding accuracy belong in the [Code Buster repository](https://github.com/tool-bunker/code-buster).
 
