@@ -16,8 +16,52 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  publish:
-    name: Publish ${{ matrix.label }}
+  prepare:
+    name: Prepare shared draft
+    runs-on: ubuntu-24.04
+    outputs:
+      release_id: ${{ steps.draft.outputs.release_id }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Validate release tag and versions
+        run: npm run version:check
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+
+      - name: Prepare changelog and unsigned warnings
+        run: node scripts/release-notes.mjs > "$RUNNER_TEMP/release-notes.md"
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+
+      - name: Create or reuse shared draft
+        id: draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if draft=$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft'); then
+            if [ "$draft" != "true" ]; then
+              echo "Refusing to upload bundles to an already public release." >&2
+              exit 1
+            fi
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft \
+              --title "Spaghetti Meter $RELEASE_TAG" \
+              --notes-file "$RUNNER_TEMP/release-notes.md"
+          fi
+          release_id=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.id')
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.label }}
+    needs: prepare
     runs-on: ${{ matrix.platform }}
     timeout-minutes: 60
     strategy:
@@ -77,22 +121,47 @@ jobs:
       - name: Check third-party notices
         run: npm run licenses:check
 
-      - name: Build and publish unsigned bundles
+      - name: Build and upload unsigned bundles to draft
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          releaseId: ${{ needs.prepare.outputs.release_id }}
           tagName: ${{ github.ref_name }}
           releaseName: Spaghetti Meter ${{ github.ref_name }}
-          releaseBody: |
-            Download the bundle for your platform below.
-
-            These builds are intentionally unsigned. Windows SmartScreen and macOS Gatekeeper may display a warning. See the [installation guidance](${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/RELEASING.md) and [complete change history](${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md).
-          releaseDraft: false
+          releaseDraft: true
           prerelease: false
-          generateReleaseNotes: true
+          generateReleaseNotes: false
           uploadUpdaterJson: false
           uploadUpdaterSignatures: false
           uploadWorkflowArtifacts: true
           retryAttempts: 2
           args: ${{ matrix.args }}
+
+  publish:
+    name: Publish complete release
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Prepare final changelog and unsigned warnings
+        run: node scripts/release-notes.mjs > "$RUNNER_TEMP/release-notes.md"
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+
+      - name: Publish all platform bundles together
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release edit "$RELEASE_TAG" \
+            --title "Spaghetti Meter $RELEASE_TAG" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
+            --draft=false

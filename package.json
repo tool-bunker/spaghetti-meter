@@ -1,6 +1,6 @@
 {
   "name": "spaghetti-meter",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A playful desktop meter for repository spaghetti",
   "type": "module",
   "scripts": {

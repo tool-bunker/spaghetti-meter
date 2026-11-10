@@ -5,11 +5,14 @@ const packageJson = readJson("package.json");
 const packageLock = readJson("package-lock.json");
 const tauriConfig = readJson("src-tauri/tauri.conf.json");
 const cargoManifest = readFileSync(fileURLToPath(new URL("../src-tauri/Cargo.toml", import.meta.url)), "utf8");
+const cargoLock = readFileSync(fileURLToPath(new URL("../src-tauri/Cargo.lock", import.meta.url)), "utf8");
 
 const versions = new Map([
   ["package.json", packageJson.version],
-  ["package-lock.json", packageLock.packages?.[""]?.version],
+  ["package-lock.json version", packageLock.version],
+  ["package-lock.json packages[\"\"]", packageLock.packages?.[""]?.version],
   ["src-tauri/Cargo.toml", cargoPackageVersion(cargoManifest)],
+  ["src-tauri/Cargo.lock", cargoLockPackageVersion(cargoLock, packageJson.name)],
   ["src-tauri/tauri.conf.json", tauriConfig.version],
 ]);
 
@@ -41,7 +44,14 @@ function readJson(path) {
 }
 
 function cargoPackageVersion(source) {
-  const packageSection = source.split(/^\[/m).find((section) => section.startsWith("package]\n"));
+  const packageSection = source.split(/^\[/m).find((section) => /^package\]\r?\n/.test(section));
+  return packageSection?.match(/^version\s*=\s*"([^"]+)"\s*$/m)?.[1];
+}
+
+function cargoLockPackageVersion(source, name) {
+  const packageSection = source.split(/^\[\[package\]\]\r?$/m).find((section) => (
+    section.match(/^name\s*=\s*"([^"]+)"\s*$/m)?.[1] === name
+  ));
   return packageSection?.match(/^version\s*=\s*"([^"]+)"\s*$/m)?.[1];
 }
 
