@@ -1,6 +1,6 @@
 {
   "name": "spaghetti-meter",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A playful desktop meter for repository spaghetti",
   "type": "module",
   "scripts": {
@@ -17,7 +17,7 @@
     "tauri": "tauri"
   },
   "config": {
-    "codeBusterVersion": "0.14.3"
+    "codeBusterVersion": "0.14.4"
   },
   "license": "MIT",
   "dependencies": {

@@ -20,7 +20,7 @@ pub async fn scan_project(
     path: String,
     app: AppHandle,
     state: State<'_, ScanState>,
-) -> Result<ScanReport, String> {
+) -> Result<Option<ScanReport>, String> {
     let project_path = validate_project_path(&path)?;
     let (cancel_tx, cancel_rx) = oneshot::channel();
     {
@@ -78,6 +78,7 @@ async fn run_code_buster(
             "--advisory",
             "--verbose",
             "--no-cache",
+            "--allow-empty",
             "--format=json",
             "--root",
         ])

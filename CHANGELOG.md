@@ -4,6 +4,16 @@ All notable changes to Spaghetti Meter are documented here. The format follows [
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-13
+
+### Changed
+
+- Upgrade the bundled, checksum-verified Code Buster engine from 0.14.3 to 0.14.4, including its latest finding-accuracy improvements and refreshed third-party notices.
+
+### Fixed
+
+- Show **Nothing to measure** with an empty bowl for empty folders, unsupported-language projects, and selections without measurable source code. Hide scores, verdicts, evidence counts, replay, and export controls; retain real zero scores for supported code without findings and preserve scanner errors.
+
 ## [0.1.1] - 2026-11-10
 
 ### Added

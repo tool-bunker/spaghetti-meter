@@ -72,10 +72,13 @@ pub fn parse_report(
     stdout: &[u8],
     project_path: &Path,
     duration_ms: u64,
-) -> Result<ScanReport, String> {
+) -> Result<Option<ScanReport>, String> {
     let report: CodeBusterReport = serde_json::from_slice(stdout)
         .map_err(|error| format!("Code Buster returned invalid JSON: {error}"))?;
     validate_report(&report)?;
+    if report.source_metrics.code_lines == 0 {
+        return Ok(None);
+    }
     let score = spaghetti_score(&report);
     let project_name = project_path
         .file_name()
@@ -91,7 +94,7 @@ pub fn parse_report(
     let top_rules = sorted_counts(rule_counts, 5);
     let groups = sorted_counts(report.advisory_summary.groups, 6);
 
-    Ok(ScanReport {
+    Ok(Some(ScanReport {
         project_name,
         project_version,
         path: project_path.to_string_lossy().into_owned(),
@@ -104,7 +107,7 @@ pub fn parse_report(
         duration_ms,
         groups,
         top_rules,
-    })
+    }))
 }
 
 fn project_version(project_path: &Path) -> Option<String> {
@@ -219,9 +222,6 @@ fn validate_report(report: &CodeBusterReport) -> Result<(), String> {
     if actionable != report.actionable_finding_count {
         return Err("Code Buster finding modes do not match the reported totals".to_owned());
     }
-    if !report.findings.is_empty() && metrics.code_lines == 0 {
-        return Err("Code Buster reported findings without measured source code".to_owned());
-    }
     Ok(())
 }
 
@@ -296,12 +296,16 @@ mod tests {
         })
     }
 
-    fn parse_value(value: &Value) -> Result<ScanReport, String> {
+    fn parse_outcome(value: &Value) -> Result<Option<ScanReport>, String> {
         parse_report(
             &serde_json::to_vec(value).unwrap(),
             Path::new("/tmp/noodle-shop"),
             123,
         )
+    }
+
+    fn parse_value(value: &Value) -> Result<ScanReport, String> {
+        parse_outcome(value).map(|report| report.expect("scoring fixture contains measured code"))
     }
 
     fn repeated_score(lines: u64, count: usize, code: &str, mode: &str) -> u32 {
@@ -374,13 +378,18 @@ mod tests {
     }
 
     #[test]
-    fn no_findings_score_zero_including_empty_and_zero_code_selections() {
-        for files in [
-            vec![],
-            vec![("comments.rs", 0)],
-            vec![("src/main.rs", 10_000)],
-        ] {
-            assert_eq!(parse_value(&report_value(&files, &[])).unwrap().score, 0);
+    fn supported_code_with_no_findings_scores_zero() {
+        let parsed = parse_value(&report_value(&[("src/main.rs", 10_000)], &[])).unwrap();
+        assert_eq!(parsed.score, 0);
+        assert_eq!(parsed.total_findings, 0);
+    }
+
+    #[test]
+    fn empty_and_zero_code_selections_are_unscorable() {
+        for files in [vec![], vec![("comments.rs", 0)]] {
+            let parsed = parse_outcome(&report_value(&files, &[])).unwrap();
+            assert!(parsed.is_none());
+            assert_eq!(serde_json::to_value(parsed).unwrap(), Value::Null);
         }
     }
 
@@ -465,10 +474,26 @@ mod tests {
     }
 
     #[test]
-    fn findings_without_measured_code_are_rejected() {
+    fn repository_findings_without_code_do_not_create_a_score() {
         for files in [vec![], vec![("comments.rs", 0)]] {
             let report = report_value(&files, &[("Cargo.toml", "project-structure", "count")]);
-            assert!(parse_value(&report).is_err());
+            assert!(parse_outcome(&report).unwrap().is_none());
+        }
+    }
+
+    #[test]
+    fn empty_reports_must_still_have_valid_metrics_and_totals() {
+        let report = report_value(&[], &[]);
+        for (pointer, value) in [
+            ("/schemaVersion", json!(2)),
+            ("/files", json!(1)),
+            ("/sourceMetrics/codeLines", json!(1)),
+            ("/detailedFindingCount", json!(1)),
+            ("/advisorySummary/groups", json!({"style": 1})),
+        ] {
+            let mut invalid = report.clone();
+            *invalid.pointer_mut(pointer).unwrap() = value;
+            assert!(parse_outcome(&invalid).is_err(), "inconsistent {pointer}");
         }
     }
 

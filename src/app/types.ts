@@ -1,4 +1,4 @@
-export type ScanStatus = "idle" | "scanning" | "complete" | "error";
+export type ScanStatus = "idle" | "scanning" | "complete" | "empty" | "error";
 
 export interface CountedLabel {
   label: string;

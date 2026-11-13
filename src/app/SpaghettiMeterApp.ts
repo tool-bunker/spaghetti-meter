@@ -160,8 +160,8 @@ export class SpaghettiMeterApp {
     this.setState({ requestId, status: "scanning", errorMessage: "" });
 
     try {
-      const report = await invoke<ScanReport>("scan_project", { requestId, path });
-      this.setState({ report, status: "complete" });
+      const report = await invoke<ScanReport | null>("scan_project", { requestId, path });
+      this.setState({ report, status: report === null ? "empty" : "complete" });
     } catch (error) {
       if (String(error) === "Scan cancelled") {
         this.clearBowl();

@@ -42,9 +42,11 @@ contribution = 100 × w × f / D × log2(1 + 100 × n / f)
 score = round(sum(contributions))
 ```
 
-Project-level findings use `max(L, 1)` for `f`. No findings means zero; otherwise the score is at least one. The 1,000-line floor dampens tiny-project extremes. Raw finding counts remain unchanged.
+Project-level findings use `max(L, 1)` for `f`. With measured supported code, no findings means zero; otherwise the score is at least one. The 1,000-line floor dampens tiny-project extremes. Raw finding counts remain unchanged.
 
 Code Buster supplies language-aware code-line measurements for exactly the selected files, including embedded code and excluding its inline test regions. String-literal content remains code, including Python runtime docstrings. Skipped files do not enter the denominator. The bowl is around full at 100; overflow remains possible beyond 100, up to the score's 32-bit integer limit.
+
+Folders without measurable supported code show an empty bowl and **Nothing to measure**, not a zero score or a verdict. Choose another folder to scan. Scanner failures still appear as errors.
 
 ## Run the app
 

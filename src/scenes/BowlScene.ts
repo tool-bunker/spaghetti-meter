@@ -338,7 +338,8 @@ export class BowlScene extends Container {
     this.bowl = bowl;
     this.bowlEffects.resize(width, height, bowl);
 
-    this.selectButton.position.set(centerX - 95, Math.max(58, top + 38));
+    this.layoutSelectButton();
+    this.selectButton.y = Math.max(58, top + 38);
     this.replayButton.position.set(20, top);
     this.newFolderButton.position.set(64, top);
     const scoreBadgeY = this.scoreBadgeY(bowl);
@@ -431,13 +432,20 @@ export class BowlScene extends Container {
 
   private applyState(): void {
     const { status, report } = this.state;
-    const showSelect = status === "idle" || status === "error";
+    const showSelect = status === "idle" || status === "error" || status === "empty";
     const projectName = report?.projectName
       ?? this.state.selectedPath.split(/[\\/]/).filter(Boolean).at(-1)
       ?? "";
-    const verdict = describeScore(report?.score);
+    const verdict = status === "empty"
+      ? {
+        label: "Nothing to measure",
+        detail: "No supported source code was found in this folder.",
+      }
+      : describeScore(report?.score);
 
     this.selectButton.visible = showSelect;
+    this.selectButton.setLabel(status === "empty" ? "Choose another folder" : "Select folder");
+    this.layoutSelectButton();
     this.updateResultControlVisibility();
     this.selectButton.setEnabled(showSelect);
     this.updateSpaghettiInteraction();
@@ -474,6 +482,16 @@ export class BowlScene extends Container {
     this.errorText.text = this.state.errorMessage;
     this.bowlEffects.setVisible(report !== null);
     this.applyResultVisibility();
+  }
+
+  private layoutSelectButton(): void {
+    if (this.sceneWidth < 1) return;
+    const width = Math.min(
+      this.state.status === "empty" ? 250 : 190,
+      this.sceneWidth - HORIZONTAL_GUTTER,
+    );
+    this.selectButton.resize(width, 46);
+    this.selectButton.x = (this.sceneWidth - width) / 2;
   }
 
   private updateResultControlVisibility(): void {
@@ -514,10 +532,11 @@ export class BowlScene extends Container {
       && (this.reducedMotion || this.verdictStampActive || this.verdictStampLanded);
     this.projectMetaGroup.visible = showProjectMeta;
     this.projectMetaGroup.accessible = showProjectMeta;
-    this.titleText.visible = showVerdict;
-    this.titleText.accessible = showVerdict;
-    this.detailText.visible = showVerdict;
-    this.detailText.accessible = showVerdict;
+    const showMessage = showVerdict || this.state.status === "empty";
+    this.titleText.visible = showMessage;
+    this.titleText.accessible = showMessage;
+    this.detailText.visible = showMessage;
+    this.detailText.accessible = showMessage;
     const showEvidence = complete
       && (this.reducedMotion || this.evidenceStampActive || this.evidenceStampLanded);
     this.evidenceText.visible = showEvidence;
