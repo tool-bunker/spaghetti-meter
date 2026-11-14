@@ -1,0 +1,47 @@
+{
+  "applicationVersion": "0.1.2",
+  "codeBusterVersion": "0.14.4",
+  "subject": {
+    "repository": "https://github.com/denoland/deno",
+    "revision": "fe7ed012d92c642fd8e5607ac5a45d517538b5c5",
+    "version": null,
+    "files": 1401,
+    "codeLines": 592766,
+    "actionable": 2645,
+    "advisory": 2580,
+    "score": 180
+  },
+  "capture": {
+    "method": "Unmodified app renderer and ResultExporter, hosted in a temporary browser capture entry with a real Code Buster report parsed by the native app scorer; no operating-system chrome.",
+    "logicalWidth": 540,
+    "logicalHeight": 900,
+    "pngResolution": 2,
+    "gifDurationMs": 9400,
+    "gifTimebaseMs": 50,
+    "gifLoops": true,
+    "gifOptimization": "Lossless re-encoding with duplicate-frame merging; decoded frame pixels and timeline verified against the original app export."
+  },
+  "assets": {
+    "empty-bowl.png": {
+      "width": 1080,
+      "height": 1800,
+      "frames": 1,
+      "bytes": 474791,
+      "sha256": "faa05840c06d98d78aa7c6b0576b1264f01f3233bfe524084de0f3e84b956380"
+    },
+    "deno-result.png": {
+      "width": 1080,
+      "height": 1800,
+      "frames": 1,
+      "bytes": 919152,
+      "sha256": "7f022f5552e6842544529db0561ce0ab567e07874daa7f1d132ac48654770164"
+    },
+    "spaghetti-demo.gif": {
+      "width": 432,
+      "height": 720,
+      "frames": 184,
+      "bytes": 8297898,
+      "sha256": "f225ddda92fd841830be4961c77fa99a9503d8daf3494bc426377fe13936b589"
+    }
+  }
+}

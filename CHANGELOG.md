@@ -4,6 +4,15 @@ All notable changes to Spaghetti Meter are documented here. The format follows [
 
 ## [Unreleased]
 
+### Added
+
+- A looping demo GIF and high-resolution welcome/result screenshots in `media/`, linked from the README and captured with the app's renderer using a real Deno scan.
+
+### Changed
+
+- Simplify the README around downloads, usage, and scoring; keep the full formula expandable and centralize engine-development instructions in the contributor guide.
+- Simplify distribution guidance and future release notes by removing signing internals and operating-system warning walkthroughs.
+
 ## [0.1.2] - 2026-11-13
 
 ### Changed

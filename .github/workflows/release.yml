@@ -35,7 +35,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_name }}
 
-      - name: Prepare changelog and unsigned warnings
+      - name: Prepare changelog and download guidance
         run: node scripts/release-notes.mjs > "$RUNNER_TEMP/release-notes.md"
         env:
           RELEASE_TAG: ${{ github.ref_name }}
@@ -151,7 +151,7 @@ jobs:
         with:
           node-version: 20
 
-      - name: Prepare final changelog and unsigned warnings
+      - name: Prepare final changelog and download guidance
         run: node scripts/release-notes.mjs > "$RUNNER_TEMP/release-notes.md"
         env:
           RELEASE_TAG: ${{ github.ref_name }}

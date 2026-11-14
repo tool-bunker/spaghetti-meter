@@ -9,23 +9,40 @@
 </p>
 
 <p align="center">
-  The most important score in software: a local desktop app that turns a repository into a bowl of animated spaghetti.
+  A local desktop app that turns a project into a bowl of animated spaghetti.
 </p>
 
-## Become unreasonably successful
+## Download
 
-1. Select a repository.
-2. Spaghetti Meter analyzes it with the bundled [Code Buster](https://github.com/tool-bunker/code-buster) executable. No separate Code Buster installation is needed.
-3. Watch the prestige score smash into a physics-driven serving of spaghetti.
-4. Export the evidence as a PNG image, animated GIF, or silent video.
+[**Download the latest release**](https://github.com/tool-bunker/spaghetti-meter/releases/latest)
 
-Share it with your boss. They will definitely love a high score.
+Available for macOS ARM64, Windows x64, and Linux x64 (glibc 2.39+, such as Ubuntu 24.04 LTS). [Code Buster](https://github.com/tool-bunker/code-buster) is bundled; no separate installation is needed.
 
-## The serious bit
+Download new releases manually.
 
-Spaghetti Meter is intentionally lighthearted. Treat the result as a conversation starter, not a software-quality ranking. If a result looks wrong, help [Code Buster](https://github.com/tool-bunker/code-buster) improve its true and false positives.
+## How it works
 
-## Official pasta mathematics
+1. Choose a project folder.
+2. Watch the spaghetti fall into the bowl.
+3. Export the result as a PNG image, animated GIF, or silent video.
+
+## See it in action
+
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="media/deno-result.png" />
+  <img src="media/spaghetti-demo.gif" alt="Spaghetti Meter replaying a real Deno scan, filling the bowl and revealing its score." width="432" />
+</picture>
+
+[Empty bowl screenshot](media/empty-bowl.png) · [Completed scan screenshot](media/deno-result.png)
+
+## Scoring
+
+Around **100** fills the bowl; higher scores overflow. Scores are playful signals, not software-quality rankings.
+
+Folders without measurable supported code show an empty bowl and **Nothing to measure**, not a zero score or a verdict. Scanner failures still appear as errors.
+
+<details>
+<summary>How the score is calculated</summary>
 
 The score measures finding density against analyzed production code, with diminishing returns for repeated findings from the same rule in the same file. Actionable findings retain weight **3**, advisories weight **1**. Naming, style, and security findings still contribute; their categories are not discarded.
 
@@ -44,34 +61,18 @@ score = round(sum(contributions))
 
 Project-level findings use `max(L, 1)` for `f`. With measured supported code, no findings means zero; otherwise the score is at least one. The 1,000-line floor dampens tiny-project extremes. Raw finding counts remain unchanged.
 
-Code Buster supplies language-aware code-line measurements for exactly the selected files, including embedded code and excluding its inline test regions. String-literal content remains code, including Python runtime docstrings. Skipped files do not enter the denominator. The bowl is around full at 100; overflow remains possible beyond 100, up to the score's 32-bit integer limit.
+Code Buster supplies language-aware code-line measurements for exactly the selected files, including embedded code and excluding its inline test regions. String-literal content remains code, including Python runtime docstrings. Skipped files do not enter the denominator. Scores are capped at the unsigned 32-bit integer limit.
 
-Folders without measurable supported code show an empty bowl and **Nothing to measure**, not a zero score or a verdict. Choose another folder to scan. Scanner failures still appear as errors.
+</details>
 
-## Run the app
+## Development
 
-Requirements: Node.js 20+, Rust, and the [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/).
-
-Linux requires x86-64 and glibc 2.39 or newer, such as Ubuntu 24.04 LTS.
-
-The pinned Code Buster release supplies the source measurements needed by density-aware scoring:
+Requires Node.js 20+, Rust, and the [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/).
 
 ```sh
 npm ci
 npm run tauri dev
 ```
 
-`npm ci` downloads the pinned platform-specific sidecar, verifies its published SHA-256 checksum, and checks its version and verbose report contract. No separate `cb` installation or source checkout is required.
-
-For engine development only, set `SPAGHETTI_METER_CB_SOURCE=../code-buster` before installation and keep it set for builds and license checks. In PowerShell, use `$env:SPAGHETTI_METER_CB_SOURCE = "../code-buster"`. The checkout must match `config.codeBusterVersion`; preparation builds a host-native sidecar without replacing an installed `cb`. Local builds are marked separately and cannot be mistaken for cached published binaries. See [RELEASING.md](RELEASING.md) before distribution.
-
-## Kitchen checks
-
-```sh
-npm run version:check
-npm run check
-npm run licenses:check
-npm run build
-cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features --locked
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for verification commands and local engine development, and [RELEASING.md](RELEASING.md) for packaging and distribution.
 

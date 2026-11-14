@@ -64,11 +64,13 @@ A pull request should include:
 - Screenshots or recordings when the visible interface changes.
 - Any platform limitations that were not exercised.
 
-Keep commits reviewable and do not commit generated build directories, exported result files, local configuration, or editor metadata.
+Keep commits reviewable. Curated README screenshots and demo animations belong in `media/`. Do not commit generated build directories, ad-hoc exported result files, local configuration, or editor metadata.
 
 ## Code Buster changes
 
-Spaghetti Meter normally bundles a pinned, checksum-verified Code Buster release. For local engine development, use `SPAGHETTI_METER_CB_SOURCE` rather than copying a binary by hand; only host-target builds are supported. License generation uses the same checkout and includes its runtime dependencies.
+Spaghetti Meter normally bundles a pinned, checksum-verified Code Buster release.
+
+For local engine development, set `SPAGHETTI_METER_CB_SOURCE=../code-buster` before installation and keep it set for builds and license checks. In PowerShell, use `$env:SPAGHETTI_METER_CB_SOURCE = "../code-buster"`. The checkout must match `config.codeBusterVersion`. Preparation supports only host-native sidecars and does not replace an installed `cb`. Local builds are marked separately and cannot be mistaken for cached published binaries. License generation uses the same checkout and includes its runtime dependencies.
 
 Before distribution, publish a compatible Code Buster release, update the configured version, unset `SPAGHETTI_METER_CB_SOURCE`, and prepare the published sidecar. Preparation checks verbose JSON source metrics and finding modes as well as `--version`; matching a version string alone is not sufficient. Follow [RELEASING.md](RELEASING.md).
 
