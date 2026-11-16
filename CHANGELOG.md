@@ -13,6 +13,10 @@ All notable changes to Spaghetti Meter are documented here. The format follows [
 - Simplify the README around downloads, usage, and scoring; keep the full formula expandable and centralize engine-development instructions in the contributor guide.
 - Simplify distribution guidance and future release notes by removing signing internals and operating-system warning walkthroughs.
 
+### Fixed
+
+- Ad-hoc sign macOS app bundles and bundled executables without an Apple Developer subscription, and verify their signatures in the release workflow. This does not add notarization or remove Gatekeeper warnings.
+
 ## [0.1.2] - 2026-11-13
 
 ### Changed

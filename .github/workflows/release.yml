@@ -121,7 +121,7 @@ jobs:
       - name: Check third-party notices
         run: npm run licenses:check
 
-      - name: Build and upload unsigned bundles to draft
+      - name: Build and upload bundles to draft
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -137,6 +137,14 @@ jobs:
           uploadWorkflowArtifacts: true
           retryAttempts: 2
           args: ${{ matrix.args }}
+
+      - name: Verify macOS ad-hoc signatures
+        if: matrix.target == 'aarch64-apple-darwin'
+        shell: bash
+        run: |
+          app="src-tauri/target/${{ matrix.target }}/release/bundle/macos/Spaghetti Meter.app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign --verify --strict --verbose=2 "$app/Contents/MacOS/cb"
 
   publish:
     name: Publish complete release

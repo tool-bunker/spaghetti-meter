@@ -28,6 +28,9 @@
     "targets": "all",
     "license": "MIT",
     "licenseFile": "../LICENSE",
+    "macOS": {
+      "signingIdentity": "-"
+    },
     "externalBin": ["binaries/cb"],
     "resources": {
       "resources/code-buster-LICENSE.txt": "code-buster-LICENSE.txt",

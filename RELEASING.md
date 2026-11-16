@@ -4,6 +4,8 @@
 
 Download the app from [GitHub Releases](https://github.com/tool-bunker/spaghetti-meter/releases/latest) and install the package for your platform. Updates are downloaded manually.
 
+macOS bundles use free ad-hoc code signing, configured by `bundle.macOS.signingIdentity = "-"` in `src-tauri/tauri.conf.json`. This seals the app and its bundled executables without an Apple account, certificate, or signing secrets. It does not provide an Apple-verified publisher identity or notarization; Gatekeeper can still block first launch.
+
 ## Published targets
 
 | Platform | Architecture | Expected bundles |
@@ -27,7 +29,7 @@ Density-aware scoring requires JSON report schema 3, `sourceMetrics.schemaVersio
 1. Push this repository to GitHub and use `main` as the default branch.
 2. Enable GitHub Actions.
 3. In **Settings → Actions → General → Workflow permissions**, allow read and write access so the release workflow's `GITHUB_TOKEN` can create releases and upload assets.
-4. Do not add signing secrets. `.github/workflows/release.yml` intentionally contains no signing environment variables and disables updater metadata and signatures.
+4. Do not add signing secrets. macOS uses ad-hoc signing; `.github/workflows/release.yml` verifies the app and bundled Code Buster signatures before allowing publication. Updater metadata and signatures remain disabled.
 
 ## Release checklist
 
