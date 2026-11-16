@@ -4,6 +4,8 @@ All notable changes to Spaghetti Meter are documented here. The format follows [
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-16
+
 ### Added
 
 - A looping demo GIF and high-resolution welcome/result screenshots in `media/`, linked from the README and captured with the app's renderer using a real Deno scan.
