@@ -14,7 +14,7 @@ export async function startApplication(reportProgress: (phase: string) => void):
     document.fonts.load('700 16px "Space Grotesk Variable"'),
     Assets.load<Texture>({
       alias: "spaghetti-bowl",
-      src: "/bowl.svg",
+      src: new URL("/bowl.svg", document.baseURI).href,
       data: { resolution: 2 },
     }),
   ]);

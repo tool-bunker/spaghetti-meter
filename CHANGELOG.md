@@ -4,6 +4,13 @@ All notable changes to Spaghetti Meter are documented here. The format follows [
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-11-17
+
+### Fixed
+
+- Resolve the bowl asset URL with the browser URL API before loading it through Pixi, preserving `localhost` in packaged `tauri://` URLs and preventing startup failure on macOS.
+- Preserve asset-loader error messages when a stack trace contains only frames, so startup diagnostics include the failed URL and underlying error.
+
 ## [0.1.4] - 2026-11-17
 
 ### Changed

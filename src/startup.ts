@@ -13,9 +13,14 @@ function showStartupError(error: unknown): void {
   if (title) title.textContent = "Spaghetti Meter could not start";
   if (detail) detail.textContent = phase;
   if (errorOutput) {
-    errorOutput.textContent = error instanceof Error
-      ? error.stack || error.message
-      : String(error);
+    if (error instanceof Error) {
+      const message = `${error.name}: ${error.message}`;
+      errorOutput.textContent = error.stack?.includes(message)
+        ? error.stack
+        : `${message}${error.stack ? `\n\n${error.stack}` : ""}`;
+    } else {
+      errorOutput.textContent = String(error);
+    }
     errorOutput.hidden = false;
   }
 }

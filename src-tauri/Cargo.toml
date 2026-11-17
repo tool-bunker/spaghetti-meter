@@ -1,6 +1,6 @@
 [package]
 name = "spaghetti-meter"
-version = "0.1.4"
+version = "0.1.5"
 description = "A playful desktop meter for repository spaghetti"
 authors = ["Robertsson"]
 license = "MIT"

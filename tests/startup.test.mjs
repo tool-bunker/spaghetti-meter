@@ -75,3 +75,22 @@ test("secondary startup errors do not overwrite the original failure", async () 
   assert.match(error, /Original initialization failure/);
   assert.doesNotMatch(error, /Secondary module failure/);
 });
+
+test("asset-loader messages survive a stack that contains only frames", async () => {
+  const error = new Error("[Loader.load] Failed to load tauri://localhost/bowl.svg: EncodingError");
+  error.stack = "_loadAssetWithRetry@tauri://localhost/assets/main.js:241:3423036";
+  const attempt = start(() => { throw error; });
+  await attempt.settle();
+  assertVisibleFailure(attempt);
+  const text = attempt.elements.get("#startup-error").textContent;
+  assert.match(text, /Failed to load tauri:\/\/localhost\/bowl\.svg: EncodingError/);
+  assert.match(text, /_loadAssetWithRetry@/);
+});
+
+test("standard error stacks are displayed without repeating the message", async () => {
+  const error = new Error("Graphics initialization failed");
+  const attempt = start(() => { throw error; });
+  await attempt.settle();
+  assertVisibleFailure(attempt);
+  assert.equal(attempt.elements.get("#startup-error").textContent, error.stack);
+});
