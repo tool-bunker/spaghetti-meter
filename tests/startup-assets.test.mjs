@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
-import { path } from "pixi.js";
 import ts from "typescript";
+
+// Load the real resolver without initializing Pixi's browser-only renderer modules in Node 20.
+const { path } = await import(new URL("./utils/path.mjs", import.meta.resolve("pixi.js")));
 
 const source = ts.transpileModule(
   readFileSync(new URL("../src/main.ts", import.meta.url), "utf8"),
