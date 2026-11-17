@@ -3,12 +3,12 @@ import RAPIER from "@dimforge/rapier2d-compat";
 import { Application, Assets, type Texture } from "pixi.js";
 import { SpaghettiMeterApp } from "./app/SpaghettiMeterApp";
 import { COLORS } from "./ui/theme";
-import "./styles.css";
 
-void (async () => {
+export async function startApplication(reportProgress: (phase: string) => void): Promise<void> {
   const host = document.querySelector<HTMLDivElement>("#app");
   if (!host) throw new Error("Application host is missing");
 
+  reportProgress("Initializing physics and loading assets");
   const [, , bowlTexture] = await Promise.all([
     RAPIER.init(),
     document.fonts.load('700 16px "Space Grotesk Variable"'),
@@ -20,40 +20,56 @@ void (async () => {
   ]);
 
   const app = new Application();
-  await app.init({
-    width: window.innerWidth,
-    height: window.innerHeight,
-    background: COLORS.background,
-    antialias: true,
-    autoDensity: true,
-    resolution: Math.min(window.devicePixelRatio, 2),
-    preference: "webgl",
-    accessibilityOptions: {
-      enabledByDefault: true,
-      activateOnTab: true,
-      deactivateOnMouseMove: false,
-    },
-    eventFeatures: {
-      move: true,
-      globalMove: false,
-      click: true,
-      wheel: false,
-    },
-  });
+  let controller: SpaghettiMeterApp | undefined;
+  try {
+    reportProgress("Creating graphics renderer");
+    await app.init({
+      width: window.innerWidth,
+      height: window.innerHeight,
+      background: COLORS.background,
+      antialias: true,
+      autoDensity: true,
+      resolution: Math.min(window.devicePixelRatio, 2),
+      preference: "webgl",
+      accessibilityOptions: {
+        enabledByDefault: true,
+        activateOnTab: true,
+        deactivateOnMouseMove: false,
+      },
+      eventFeatures: {
+        move: true,
+        globalMove: false,
+        click: true,
+        wheel: false,
+      },
+    });
 
-  app.canvas.className = "spaghetti-meter-canvas";
-  app.canvas.setAttribute("role", "application");
-  app.canvas.setAttribute("aria-label", "Spaghetti Meter project mess meter");
-  host.appendChild(app.canvas);
+    reportProgress("Building interface");
+    app.canvas.className = "spaghetti-meter-canvas";
+    app.canvas.setAttribute("role", "application");
+    app.canvas.setAttribute("aria-label", "Spaghetti Meter project mess meter");
+    host.appendChild(app.canvas);
+    controller = new SpaghettiMeterApp(app, bowlTexture);
 
-  const controller = new SpaghettiMeterApp(app, bowlTexture);
+    reportProgress("Drawing first frame");
+    app.render();
+    host.replaceChildren(app.canvas);
+  } catch (error) {
+    controller?.dispose();
+    if (app.renderer) {
+      app.destroy(
+        { removeView: true, releaseGlobalResources: true },
+        { children: true },
+      );
+    }
+    throw error;
+  }
+
   window.addEventListener("beforeunload", () => {
-    controller.dispose();
+    controller?.dispose();
     app.destroy(
       { removeView: true, releaseGlobalResources: true },
       { children: true },
     );
   }, { once: true });
-})().catch((error: unknown) => {
-  console.error("Spaghetti Meter failed to start", error);
-});
+}

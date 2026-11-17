@@ -42,6 +42,7 @@ Run the frontend checks:
 ```sh
 npm run version:check
 npm run check
+npm test
 npm run licenses:check
 npm run build
 ```
@@ -53,6 +54,8 @@ cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features --l
 ```
 
 If a change affects one specific path, also include a focused reproduction or smoke check that proves that behavior.
+
+For startup failures, include the on-screen startup phase and error, application version, and operating-system version. A window opening is not sufficient smoke-test evidence: confirm that the welcome screen actually renders.
 
 ## Pull requests
 

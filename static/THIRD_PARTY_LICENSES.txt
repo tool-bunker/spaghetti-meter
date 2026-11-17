@@ -571,9 +571,9 @@ COMPONENT INVENTORY
   License: MIT
   Source: https://crates.io/crates/zmij/1.0.23 (https://github.com/dtolnay/zmij)
   Authors: David Tolnay <dtolnay@gmail.com>
-- bundled:code-buster@0.14.4
+- bundled:code-buster@0.14.5
   License: MIT
-  Source: https://github.com/tool-bunker/code-buster/releases/tag/v0.14.4
+  Source: https://github.com/tool-bunker/code-buster/releases/tag/v0.14.5
 - cargo:adler2@2.0.1
   License: 0BSD OR MIT OR Apache-2.0
   Source: https://crates.io/crates/adler2/2.0.1 (https://github.com/oyvindln/adler2)
@@ -8287,7 +8287,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 --------------------------------------------------------------------------------
 
 Notice 77
-Used by: bundled:code-buster@0.14.4 (LICENSE)
+Used by: bundled:code-buster@0.14.5 (LICENSE)
 
 MIT License
 

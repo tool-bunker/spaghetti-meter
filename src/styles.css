@@ -34,6 +34,31 @@ body {
   outline: none;
 }
 
+.startup-status {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  background: #0d0824;
+  max-width: 620px;
+  height: 100%;
+  margin: 0 auto;
+  padding: 48px 24px;
+  overflow: auto;
+}
+
+.startup-status h1 {
+  font-size: 24px;
+}
+
+.startup-status pre {
+  padding: 16px;
+  border: 1px solid currentColor;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 .license-dialog {
   width: min(760px, calc(100vw - 32px));
   height: min(760px, calc(100vh - 32px));

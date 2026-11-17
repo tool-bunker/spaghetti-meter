@@ -4,6 +4,16 @@ All notable changes to Spaghetti Meter are documented here. The format follows [
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-11-17
+
+### Changed
+
+- Upgrade the bundled, checksum-verified Code Buster engine from 0.14.4 to 0.14.5 and refresh third-party notices.
+
+### Fixed
+
+- Show the failing startup phase and error instead of leaving a blank window when interface modules, assets, physics, or graphics initialization fails. Render the welcome screen before dismissing the loading message.
+
 ## [0.1.3] - 2026-11-16
 
 ### Added
